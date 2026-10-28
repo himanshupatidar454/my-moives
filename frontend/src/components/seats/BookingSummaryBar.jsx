@@ -72,7 +72,7 @@ export const BookingSummaryBar = ({
       {/* Disclaimers & Action */}
       <p className="text-white-50 small mb-3" style={{ fontSize: '0.75rem' }}>
         <IconSparkles size={12} className="text-warning me-1" />
-        Mock availability preview. Selecting seats does not block real-time inventory until Express checkout completes.
+        Seats are held upon proceeding to checkout and confirmed once payment verification completes.
       </p>
 
       <button

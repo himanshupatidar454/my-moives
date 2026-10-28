@@ -4,6 +4,11 @@ const Screen = require("../models/Screen");
 const ShowSeat = require("../models/ShowSeat");
 const { broadcastSeatUpdate } = require("../utils/socket");
 const config = require("../config/env");
+const {
+  BadRequestError,
+  NotFoundError,
+  ConflictError
+} = require("../utils/errors");
 
 class SeatService {
   /**
@@ -12,7 +17,7 @@ class SeatService {
   static async initializeShowSeats(showId) {
     const show = await Show.findById(showId).populate("screen");
     if (!show) {
-      throw new Error("Show not found");
+      throw new NotFoundError("Show not found");
     }
 
     const existingCount = await ShowSeat.countDocuments({ show: showId });
@@ -113,7 +118,7 @@ class SeatService {
 
     const show = await Show.findById(showId);
     if (!show) {
-      throw new Error("Show not found");
+      throw new NotFoundError("Show not found");
     }
 
     const showSeats = await ShowSeat.find({ show: showId }).sort({ row: 1, seatNumber: 1 });
@@ -148,7 +153,7 @@ class SeatService {
    */
   static async reserveSeats({ showId, seatIdentifiers, userId, holdMinutes = config.reservationHoldMinutes }) {
     if (!seatIdentifiers || seatIdentifiers.length === 0) {
-      throw new Error("At least one seat must be selected");
+      throw new BadRequestError("At least one seat must be selected");
     }
 
     await this.initializeShowSeats(showId);
@@ -179,7 +184,7 @@ class SeatService {
         );
 
         if (!reservedSeat) {
-          throw new Error(`Seat '${seatId}' is no longer available. Please choose another seat.`);
+          throw new ConflictError(`Seat '${seatId}' is no longer available. Please choose another seat.`);
         }
 
         successfullyReserved.push(reservedSeat);

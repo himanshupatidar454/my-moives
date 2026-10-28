@@ -34,8 +34,8 @@ export const Home = () => {
         ]);
 
         setFeaturedMovies(featuredRes);
-        setNowShowing(allRes.movies.filter((m) => m.status === 'now_showing'));
-        setComingSoon(allRes.movies.filter((m) => m.status === 'coming_soon'));
+        setNowShowing(allRes.movies.filter((m) => m.status === 'now_showing' || m.status === 'now-showing'));
+        setComingSoon(allRes.movies.filter((m) => m.status === 'coming_soon' || m.status === 'coming-soon'));
         setTheatres(theatreRes.theatres.slice(0, 4));
       } catch (err) {
         console.error('Failed to load home data', err);

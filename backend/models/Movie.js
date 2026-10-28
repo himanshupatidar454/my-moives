@@ -165,11 +165,17 @@ movieSchema.index({ releaseStatus: 1, releaseDate: -1 });
 movieSchema.index({ genres: 1 });
 movieSchema.index({ language: 1 });
 movieSchema.index({ averageRating: -1 });
-movieSchema.index({
-  title: "text",
-  synopsis: "text",
-  director: "text"
-});
+movieSchema.index(
+  {
+    title: "text",
+    synopsis: "text",
+    director: "text"
+  },
+  {
+    default_language: "english",
+    language_override: "none"
+  }
+);
 
 // Pre-save hook to ensure slug is always set
 movieSchema.pre("validate", function () {

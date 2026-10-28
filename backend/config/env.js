@@ -1,22 +1,51 @@
 require("dotenv").config();
 
-const requiredEnvVars = ["MONGODB_URI", "JWT_SECRET"];
+function loadConfig(env = process.env) {
+  const nodeEnv = env.NODE_ENV || "development";
+  const isProduction = nodeEnv === "production";
 
-for (const envVar of requiredEnvVars) {
-  if (!process.env[envVar]) {
-    console.warn(`[Config Warning] Missing environment variable: ${envVar}. Using fallback.`);
+  let mongodbUri = env.MONGODB_URI;
+  let jwtSecret = env.JWT_SECRET;
+
+  if (isProduction) {
+    const missing = [];
+    if (!mongodbUri) missing.push("MONGODB_URI");
+    if (!jwtSecret) missing.push("JWT_SECRET");
+
+    if (missing.length > 0) {
+      throw new Error(
+        `[Config Error] Server cannot start in production mode. Missing required environment variable(s): ${missing.join(", ")}`
+      );
+    }
+  } else {
+    if (!mongodbUri) {
+      console.warn(
+        "[Config Warning] MONGODB_URI is not set. Using dev fallback: mongodb://127.0.0.1:27017/imovies"
+      );
+      mongodbUri = "mongodb://127.0.0.1:27017/imovies";
+    }
+    if (!jwtSecret) {
+      console.warn(
+        "[Config Warning] JWT_SECRET is not set. Using clearly labelled dev fallback: dev_secret_do_not_use_in_production (NOT SAFE FOR PRODUCTION USE)."
+      );
+      jwtSecret = "dev_secret_do_not_use_in_production";
+    }
   }
+
+  return {
+    port: parseInt(env.PORT, 10) || 5000,
+    mongodbUri,
+    jwtSecret,
+    jwtExpiresIn: env.JWT_EXPIRES_IN || "7d",
+    frontendUrl: env.FRONTEND_URL || "http://localhost:5173",
+    nodeEnv,
+    paymentProvider: env.PAYMENT_PROVIDER || "dev",
+    paymentWebhookSecret: env.PAYMENT_WEBHOOK_SECRET || "",
+    reservationHoldMinutes: parseInt(env.RESERVATION_HOLD_MINUTES, 10) || 10
+  };
 }
 
-const config = {
-  port: parseInt(process.env.PORT, 10) || 5000,
-  mongodbUri: process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/imovies",
-  jwtSecret: process.env.JWT_SECRET || "imovies_jwt_super_secret_development_key_123456",
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || "7d",
-  frontendUrl: process.env.FRONTEND_URL || "http://localhost:5173",
-  nodeEnv: process.env.NODE_ENV || "development",
-  paymentProvider: process.env.PAYMENT_PROVIDER || "dev",
-  reservationHoldMinutes: parseInt(process.env.RESERVATION_HOLD_MINUTES, 10) || 10
-};
+const config = loadConfig(process.env);
+config.loadConfig = loadConfig;
 
 module.exports = config;

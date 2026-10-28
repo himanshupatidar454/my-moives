@@ -1,5 +1,6 @@
 import api from './api';
 import { mockUsers } from '../data/mockUsers';
+import { USE_MOCKS } from '../utils/env';
 
 const USERS_LOCAL_KEY = 'imovies_users_cache';
 
@@ -17,11 +18,11 @@ const getStoredUsers = () => {
 export const adminService = {
   // Summary dashboard analytics
   getDashboardStats: async () => {
-    try {
+    if (!USE_MOCKS) {
       const res = await api.get('/admin/stats');
-      if (res.data?.stats) return { stats: res.data.stats, isDemo: false };
-    } catch {
-      // Demo
+      const stats = res.data?.stats || res.data?.data?.stats;
+      const trends = res.data?.trends || res.data?.data?.trends || [];
+      return { stats, trends, isDemo: false };
     }
 
     return {
@@ -45,47 +46,68 @@ export const adminService = {
     };
   },
 
-  // Get users list
-  getUsers: async () => {
-    try {
-      const res = await api.get('/admin/users');
-      if (res.data?.users) return { users: res.data.users, isDemo: false };
-    } catch {
-      // Demo
+  // Full reports breakdown
+  getReports: async () => {
+    if (!USE_MOCKS) {
+      const res = await api.get('/admin/reports');
+      const data = res.data?.data || res.data;
+      return {
+        topMovies: data?.topMovies || [],
+        theatreBreakdown: data?.theatreBreakdown || [],
+        generatedAt: data?.generatedAt || new Date().toISOString(),
+        isDemo: false
+      };
     }
-    return { users: getStoredUsers(), isDemo: true };
+
+    return {
+      topMovies: [],
+      theatreBreakdown: [],
+      generatedAt: new Date().toISOString(),
+      isDemo: true
+    };
+  },
+
+  // Get users list
+  getUsers: async (params = {}) => {
+    if (!USE_MOCKS) {
+      const res = await api.get('/admin/users', { params });
+      const users = res.data?.users || res.data?.data?.users || [];
+      const total = res.data?.total ?? res.data?.data?.total ?? users.length;
+      return { users, total, isDemo: false };
+    }
+
+    return { users: getStoredUsers(), total: getStoredUsers().length, isDemo: true };
   },
 
   // Toggle user status
-  toggleUserStatus: async (userId) => {
-    try {
-      const res = await api.patch(`/admin/users/${userId}/status`);
-      if (res.data?.user) return { success: true, user: res.data.user };
-    } catch {
-      // Demo
+  toggleUserStatus: async (userId, nextStatus) => {
+    if (!USE_MOCKS) {
+      const res = await api.patch(`/admin/users/${userId}/status`, nextStatus ? { status: nextStatus } : {});
+      const user = res.data?.user || res.data?.data?.user;
+      return { success: true, user, isDemo: false };
     }
+
     const current = getStoredUsers();
     const idx = current.findIndex((u) => u.id === userId);
     if (idx !== -1) {
-      current[idx].status = current[idx].status === 'active' ? 'inactive' : 'active';
+      current[idx].status = nextStatus || (current[idx].status === 'active' ? 'inactive' : 'active');
       localStorage.setItem(USERS_LOCAL_KEY, JSON.stringify(current));
       return { success: true, user: current[idx], isDemo: true };
     }
     return { success: false, message: 'User not found' };
   },
 
-  // Export report to CSV/JSON mock
+  // Export report to CSV/JSON
   exportReport: (format = 'json', data = {}) => {
     const filename = `imovies-report-${Date.now()}.${format}`;
     const content = format === 'json'
       ? JSON.stringify(data, null, 2)
       : [
           ['Metric', 'Value'],
-          ['Total Movies', '10'],
-          ['Total Theatres', '6'],
-          ['Upcoming Shows', '48'],
-          ['Total Bookings', '184'],
-          ['Total Revenue ($)', '28450.00'],
+          ['Total Movies', data?.summary?.totalMovies || '10'],
+          ['Total Theatres', data?.summary?.totalTheatres || '6'],
+          ['Total Bookings', data?.summary?.totalBookings || '184'],
+          ['Total Revenue ($)', data?.summary?.totalRevenue || '28450.00'],
           ['Generated At', new Date().toISOString()]
         ].map((e) => e.join(',')).join('\n');
 

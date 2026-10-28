@@ -9,8 +9,8 @@ export const MovieCard = ({ movie }) => {
 
   if (!movie) return null;
 
-  const favorited = isFavorite(movie.id);
-  const isComingSoon = movie.status === 'coming_soon';
+  const favorited = isFavorite(movie.id || movie._id);
+  const isComingSoon = movie.status === 'coming_soon' || movie.status === 'coming-soon';
 
   const handleFavoriteClick = (e) => {
     e.preventDefault();

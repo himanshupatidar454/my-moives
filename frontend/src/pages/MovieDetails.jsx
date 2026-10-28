@@ -72,8 +72,8 @@ export const MovieDetails = () => {
     );
   }
 
-  const favorited = isFavorite(movie.id);
-  const isComingSoon = movie.status === 'coming_soon';
+  const favorited = isFavorite(movie.id || movie._id);
+  const isComingSoon = movie.status === 'coming_soon' || movie.status === 'coming-soon';
 
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
@@ -95,10 +95,10 @@ export const MovieDetails = () => {
       if (res.success) {
         setReviews([res.review, ...reviews]);
         setNewReviewText('');
-        toast.success('Your review has been published! (Saved to demo storage)');
+        toast.success(res.message || 'Your review has been published!');
       }
-    } catch {
-      toast.error('Could not submit review.');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not submit review.');
     } finally {
       setSubmittingReview(false);
     }

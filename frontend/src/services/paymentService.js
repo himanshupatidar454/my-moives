@@ -1,47 +1,64 @@
 import api from './api';
+import { USE_MOCKS } from '../utils/env';
 
 export const paymentService = {
-  // Initiate payment with backend order creation
-  initiatePayment: async (paymentDetails) => {
-    try {
-      const res = await api.post('/payments/create-order', {
-        amount: paymentDetails.amount,
-        currency: 'USD',
-        bookingId: paymentDetails.bookingId,
-        paymentMethod: paymentDetails.method
-      });
-      if (res.data?.orderId) {
-        return { success: true, orderId: res.data.orderId, isLive: true };
+  // Create payment order with real bookingId
+  createPaymentOrder: async (bookingId) => {
+    if (!USE_MOCKS) {
+      const res = await api.post('/payments/create-order', { bookingId });
+      const data = res.data?.data || res.data;
+      if (data?.orderId) {
+        return {
+          success: true,
+          orderId: data.orderId,
+          amount: data.amount,
+          currency: data.currency || 'USD',
+          bookingId: data.bookingId,
+          isLive: data.isLive
+        };
       }
-    } catch {
-      // Backend payment gateway not active
+      throw new Error('Payment order creation failed on server');
     }
 
-    // Explicit demo checkout state simulation
     return {
       success: true,
       orderId: `DEMO-PAY-${Date.now()}`,
+      amount: 0,
+      currency: 'USD',
+      bookingId,
       isLive: false,
       message: 'Demo payment simulated. No financial charge was made.'
     };
   },
 
+  // Alias for backward compatibility if initiatePayment was called
+  initiatePayment: async (paymentDetails) => {
+    const bookingId = paymentDetails?.bookingId;
+    return paymentService.createPaymentOrder(bookingId);
+  },
+
   // Verify payment status
-  verifyPayment: async (orderId, paymentResponse) => {
-    try {
+  verifyPayment: async (orderId, paymentResponse = {}) => {
+    if (!USE_MOCKS) {
       const res = await api.post('/payments/verify', {
         orderId,
         paymentResponse
       });
-      if (res.data?.verified) {
-        return { verified: true, isLive: true };
+      const data = res.data?.data || res.data;
+      if (data?.verified) {
+        return {
+          verified: true,
+          booking: data.booking,
+          isLive: data.isLive,
+          status: data.status
+        };
       }
-    } catch {
-      // Demo fallback
+      throw new Error('Payment verification failed');
     }
 
     return {
       verified: true,
+      booking: null,
       isLive: false,
       status: 'confirmed_demo'
     };

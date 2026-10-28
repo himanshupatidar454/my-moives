@@ -5,18 +5,16 @@ import {
   IconFilm,
   IconEye,
   IconEyeOff,
-  IconShield,
-  IconUser,
-  IconSparkles
+  IconShield
 } from '../components/common/Icons';
 
 export const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, switchDemoRole } = useAuth();
+  const { login } = useAuth();
 
-  const [email, setEmail] = useState('alex@imovies.com');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -31,18 +29,6 @@ export const Login = () => {
     if (res?.success) {
       navigate(from, { replace: true });
     }
-  };
-
-  const fillDemoCustomer = () => {
-    setEmail('alex@imovies.com');
-    setPassword('password123');
-    switchDemoRole('user');
-  };
-
-  const fillDemoAdmin = () => {
-    setEmail('admin@imovies.com');
-    setPassword('admin123');
-    switchDemoRole('admin');
   };
 
   return (
@@ -74,37 +60,6 @@ export const Login = () => {
           </Link>
           <h4 className="fw-bold text-white mb-1">Welcome Back</h4>
           <p className="text-white-50 small mb-0">Sign in to your cinema account to manage bookings & favorites</p>
-        </div>
-
-        {/* Demo Quick-Fill Buttons */}
-        <div className="p-3 rounded-3 mb-4" style={{ backgroundColor: 'rgba(255, 255, 255, 0.04)', border: '1px solid var(--border-subtle)' }}>
-          <div className="d-flex align-items-center justify-content-between mb-2">
-            <span className="text-white-50 small fw-bold text-uppercase" style={{ fontSize: '0.7rem' }}>
-              <IconSparkles size={12} className="text-warning me-1" />
-              Quick Demo Fill
-            </span>
-            <span className="badge bg-danger rounded-pill px-2 py-0" style={{ fontSize: '0.65rem' }}>Demo Ready</span>
-          </div>
-          <div className="d-flex gap-2">
-            <button
-              type="button"
-              onClick={fillDemoCustomer}
-              className="btn btn-sm btn-cinema-secondary flex-grow-1 d-flex align-items-center justify-content-center gap-1"
-              style={{ fontSize: '0.78rem' }}
-            >
-              <IconUser size={13} />
-              Demo Customer
-            </button>
-            <button
-              type="button"
-              onClick={fillDemoAdmin}
-              className="btn btn-sm btn-outline-danger flex-grow-1 d-flex align-items-center justify-content-center gap-1"
-              style={{ fontSize: '0.78rem' }}
-            >
-              <IconShield size={13} />
-              Demo Admin
-            </button>
-          </div>
         </div>
 
         {/* Form */}
@@ -140,41 +95,60 @@ export const Login = () => {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="btn position-absolute top-50 end-0 translate-middle-y me-2 text-white-50 p-1 border-0"
-                tabIndex={-1}
+                className="btn position-absolute top-50 end-0 translate-middle-y me-2 text-white-50 border-0 p-1"
+                aria-label={showPassword ? "Hide password" : "Show password"}
               >
                 {showPassword ? <IconEyeOff size={18} /> : <IconEye size={18} />}
               </button>
             </div>
           </div>
 
-          <div className="form-check mb-4">
-            <input
-              type="checkbox"
-              id="rememberMe"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-              className="form-check-input"
-            />
-            <label htmlFor="rememberMe" className="form-check-label text-white-50 small">
-              Remember me on this browser
-            </label>
+          <div className="d-flex align-items-center justify-content-between mb-4">
+            <div className="form-check">
+              <input
+                type="checkbox"
+                id="rememberMe"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="form-check-input bg-dark border-secondary"
+              />
+              <label htmlFor="rememberMe" className="form-check-label text-white-50 small">
+                Keep me signed in
+              </label>
+            </div>
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="btn btn-cinema w-100 py-3 fw-bold mb-3"
+            className="btn btn-cinema w-100 py-3 fw-bold mb-3 d-flex align-items-center justify-content-center gap-2"
           >
-            {loading ? 'Authenticating...' : 'Sign In to IMovies'}
+            {loading ? (
+              <>
+                <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                Signing in to IMovies...
+              </>
+            ) : (
+              'Sign In'
+            )}
           </button>
+
+          <div className="text-center">
+            <span className="text-white-50 small">
+              New to IMovies?{' '}
+              <Link to="/register" className="text-danger fw-semibold text-decoration-none hover-underline">
+                Create an account
+              </Link>
+            </span>
+          </div>
         </form>
 
-        <div className="text-center text-white-50 small pt-3 border-top border-secondary border-opacity-25">
-          Don't have an IMovies account?{' '}
-          <Link to="/register" className="text-danger fw-semibold text-decoration-none">
-            Register now
-          </Link>
+        {/* Security Assurance */}
+        <div className="border-top border-secondary border-opacity-25 mt-4 pt-3 text-center">
+          <small className="text-white-50 d-inline-flex align-items-center gap-1" style={{ fontSize: '0.75rem' }}>
+            <IconShield size={13} className="text-success" />
+            256-Bit SSL Encrypted Cinema Booking Network
+          </small>
         </div>
       </div>
     </div>

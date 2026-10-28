@@ -57,6 +57,7 @@ const reviewSchema = new mongoose.Schema(
       transform: (doc, ret) => {
         ret.id = ret._id.toString();
         ret.comment = ret.reviewText;
+        ret.content = ret.reviewText;
         if (doc.createdAt) {
           ret.date = doc.createdAt.toISOString().split("T")[0];
         }
@@ -69,6 +70,7 @@ const reviewSchema = new mongoose.Schema(
       transform: (doc, ret) => {
         ret.id = ret._id.toString();
         ret.comment = ret.reviewText;
+        ret.content = ret.reviewText;
         if (doc.createdAt) {
           ret.date = doc.createdAt.toISOString().split("T")[0];
         }

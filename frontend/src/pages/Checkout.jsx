@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 import { bookingService } from '../services/bookingService';
 import { paymentService } from '../services/paymentService';
 import { toast } from 'react-toastify';
@@ -8,14 +7,12 @@ import {
   IconTicket,
   IconShield,
   IconCreditCard,
-  IconChevronLeft,
-  IconSparkles
+  IconChevronLeft
 } from '../components/common/Icons';
 
 export const Checkout = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user } = useAuth();
 
   const checkoutData = location.state || {};
   const {
@@ -25,12 +22,12 @@ export const Checkout = () => {
     date,
     selectedSeats = [],
     subtotal = 0,
-    bookingFee = 0,
-    totalAmount = 0
+    bookingFee = 0
   } = checkoutData;
 
   const [paymentMethod, setPaymentMethod] = useState('card');
   const [couponCode, setCouponCode] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [discount, setDiscount] = useState(0);
   const [termsAgreed, setTermsAgreed] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -46,22 +43,36 @@ export const Checkout = () => {
     );
   }
 
-  const handleApplyCoupon = (e) => {
+  // Server-authoritative coupon verification
+  const handleApplyCoupon = async (e) => {
     e.preventDefault();
-    if (couponCode.trim().toUpperCase() === 'IMOVIES5') {
-      setDiscount(5.00);
-      toast.success('Promo code applied! $5.00 discount activated.');
-    } else if (couponCode.trim().toUpperCase() === 'PREMIERE10') {
-      const disc = Number((subtotal * 0.1).toFixed(2));
-      setDiscount(disc);
-      toast.success(`VIP Promo applied! $${disc.toFixed(2)} discount activated.`);
-    } else {
-      toast.error('Invalid coupon code. Try code "IMOVIES5" for $5 discount.');
+    if (!couponCode.trim()) {
+      toast.warning('Please enter a coupon code.');
+      return;
+    }
+
+    try {
+      const res = await bookingService.verifyCoupon(couponCode.trim(), subtotal);
+      if (res?.valid) {
+        setDiscount(res.discount);
+        setAppliedCoupon(res.couponCode);
+        toast.success(res.message || `Coupon ${res.couponCode} applied! $${Number(res.discount).toFixed(2)} discount.`);
+      }
+    } catch (err) {
+      setDiscount(0);
+      setAppliedCoupon(null);
+      const msg = err.response?.data?.message || err.message || 'Invalid coupon code.';
+      toast.error(msg);
     }
   };
 
-  const finalAmount = Math.max(0, totalAmount - discount);
+  const finalAmount = Math.max(0, Math.round((subtotal + bookingFee - discount) * 100) / 100);
 
+  // Real 3-step checkout order:
+  // 1) create the booking on the server
+  // 2) create the payment order using the real booking ID
+  // 3) verify the payment on the server
+  // 4) show confirmation from the server's booking data
   const handleCompletePayment = async () => {
     if (!termsAgreed) {
       toast.warning('Please agree to the booking terms and cancellation policy to proceed.');
@@ -70,54 +81,51 @@ export const Checkout = () => {
 
     setProcessing(true);
     try {
-      // Step 1: Initiate payment order through service
-      const paymentOrder = await paymentService.initiatePayment({
-        amount: finalAmount,
-        method: paymentMethod,
-        bookingId: `TEMP-${Date.now()}`
+      // Step 1: Create booking on server with show ID and seat identifiers
+      const showId = show?.id || show?._id;
+      const seatIdentifiers = selectedSeats.map((s) => s.id || s.seatIdentifier);
+
+      const bookingRes = await bookingService.createBooking({
+        showId,
+        seatIdentifiers,
+        couponCode: appliedCoupon || (discount > 0 ? couponCode.trim() : undefined)
       });
 
-      // Step 2: Simulate backend verification delay
-      await new Promise((resolve) => setTimeout(resolve, 1400));
+      const serverBooking = bookingRes.booking;
+      const realBookingId = serverBooking?._id || serverBooking?.id;
 
+      if (!realBookingId) {
+        throw new Error('Server did not return a valid booking ID');
+      }
+
+      // Step 2: Create payment order with real booking ID
+      const paymentOrder = await paymentService.createPaymentOrder(realBookingId);
+
+      // Step 3: Verify payment with real order ID
       const verification = await paymentService.verifyPayment(paymentOrder.orderId, {
-        simulatedSuccess: true
+        simulatedSuccess: true,
+        paymentMethod,
+        bookingId: realBookingId
       });
 
-      if (verification.verified) {
-        // Step 3: Create verified booking record
-        const bookingRes = await bookingService.createBooking({
-          userId: user?.id || 'guest-001',
-          customerName: user?.name || 'Cinema Guest',
-          customerEmail: user?.email || 'guest@imovies.com',
-          movieId: movie.id,
-          movieTitle: movie.title,
-          moviePoster: movie.posterUrl,
-          theatreId: theatre?.id,
-          theatreName: theatre?.name,
-          theatreLocation: theatre?.location,
-          screenName: show?.screenName || 'Screen 1',
-          format: show?.format || '2D',
-          date: date?.label || date,
-          isoDate: date?.isoDate || new Date().toISOString().split('T')[0],
-          time: show?.time,
-          seats: selectedSeats.map((s) => s.id),
-          ticketCount: selectedSeats.length,
-          subtotal,
-          bookingFee,
-          discount,
-          totalAmount: finalAmount,
-          paymentMethod: `${paymentMethod.toUpperCase()} (Demo Simulator)`
-        });
-
+      if (verification?.verified) {
+        // Step 4: Show confirmation using server-returned booking data
+        const confirmedBooking = verification.booking || serverBooking;
         toast.success('Booking confirmed! Generating your digital cinema ticket...');
-        navigate(`/booking-confirmation/${bookingRes.booking.id}`, {
-          state: { booking: bookingRes.booking }
+        navigate(`/booking-confirmation/${confirmedBooking.id || confirmedBooking._id}`, {
+          state: { booking: confirmedBooking }
         });
+      } else {
+        throw new Error('Payment verification was not approved.');
       }
     } catch (err) {
-      toast.error('Payment verification failed. Please try again.');
-      console.error(err);
+      const msg =
+        err.response?.data?.message ||
+        (err.response?.data?.errors && err.response.data.errors[0]?.msg) ||
+        err.message ||
+        'Payment verification failed. Please try again.';
+      toast.error(msg);
+      console.error('[Checkout Error]', err);
     } finally {
       setProcessing(false);
     }
@@ -159,7 +167,7 @@ export const Checkout = () => {
               />
               <div>
                 <h5 className="fw-bold text-white mb-1">{movie.title}</h5>
-                <p className="text-white-50 small mb-1">{theatre?.name} • {theatre?.location}</p>
+                <p className="text-white-50 small mb-1">{theatre?.name} • {theatre?.city || theatre?.location}</p>
                 <p className="text-white-50 small mb-0">
                   <span className="badge bg-danger rounded-pill px-2 py-0 me-2">{show?.format}</span>
                   {date?.label || date} at {show?.time}
@@ -188,15 +196,6 @@ export const Checkout = () => {
               Select Payment Method
             </h5>
 
-            {/* Strict Notice */}
-            <div className="p-3 rounded-3 mb-4 d-flex align-items-start gap-2" style={{ backgroundColor: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.25)', fontSize: '0.8rem' }}>
-              <IconSparkles size={16} className="text-info mt-1 flex-shrink-0" />
-              <div className="text-white-50">
-                <strong className="text-white d-block mb-1">Architecture Safety Guarantee:</strong>
-                Card credentials are never stored in browser storage. Checkout operates in verified demo mode until an Express payment gateway is hooked up.
-              </div>
-            </div>
-
             <div className="d-flex flex-column gap-3 mb-4">
               <label
                 className={`p-3 rounded-3 border d-flex align-items-center justify-content-between cursor-pointer ${
@@ -213,7 +212,7 @@ export const Checkout = () => {
                     className="form-check-input"
                   />
                   <div>
-                    <span className="fw-bold text-white d-block">Credit / Debit Card (Demo)</span>
+                    <span className="fw-bold text-white d-block">Credit / Debit Card</span>
                     <small className="text-white-50">Visa, Mastercard, Amex</small>
                   </div>
                 </div>
@@ -235,7 +234,7 @@ export const Checkout = () => {
                     className="form-check-input"
                   />
                   <div>
-                    <span className="fw-bold text-white d-block">Instant UPI / QR Code (Demo)</span>
+                    <span className="fw-bold text-white d-block">Instant UPI / QR Code</span>
                     <small className="text-white-50">Google Pay, PhonePe, Paytm, BHIM</small>
                   </div>
                 </div>
@@ -257,7 +256,7 @@ export const Checkout = () => {
                     className="form-check-input"
                   />
                   <div>
-                    <span className="fw-bold text-white d-block">Digital Cinema Wallet (Demo)</span>
+                    <span className="fw-bold text-white d-block">Digital Cinema Wallet</span>
                     <small className="text-white-50">IMovies Credits, Apple Pay, PayPal</small>
                   </div>
                 </div>
@@ -287,7 +286,7 @@ export const Checkout = () => {
           <div className="p-4 rounded-4 shadow-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-strong)' }}>
             <h5 className="fw-bold text-white mb-3">Payment Summary</h5>
 
-            {/* Promo Code Form */}
+            {/* Server-verified Promo Code Form */}
             <form onSubmit={handleApplyCoupon} className="mb-4">
               <label className="cinema-label">Discount Coupon / Gift Code:</label>
               <div className="input-group">
@@ -303,7 +302,7 @@ export const Checkout = () => {
                 </button>
               </div>
               <small className="text-white-50 d-block mt-1" style={{ fontSize: '0.72rem' }}>
-                Tip: Try code <code>IMOVIES5</code> for $5.00 off
+                Tip: Try server code <code>IMOVIES5</code> ($5 off) or <code>PREMIERE10</code> (10% off)
               </small>
             </form>
 
@@ -351,7 +350,7 @@ export const Checkout = () => {
 
             <div className="d-flex align-items-center justify-content-center gap-2 text-white-50 small mt-3" style={{ fontSize: '0.75rem' }}>
               <IconShield size={14} className="text-success" />
-              <span>TLS 256-bit Encrypted Checkout • Demo Protected</span>
+              <span>TLS 256-bit Encrypted Checkout</span>
             </div>
           </div>
         </div>

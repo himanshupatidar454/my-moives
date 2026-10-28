@@ -1,8 +1,10 @@
+const crypto = require("crypto");
 const mongoose = require("mongoose");
 
 function generateBookingReference() {
-  const randomNum = Math.floor(10000 + Math.random() * 90000);
-  return `IMV-${randomNum}`;
+  const timestamp = Date.now().toString(36).toUpperCase();
+  const random = crypto.randomBytes(4).toString("hex").toUpperCase();
+  return `IMV-${timestamp}-${random}`;
 }
 
 const bookingSchema = new mongoose.Schema(
@@ -68,6 +70,11 @@ const bookingSchema = new mongoose.Schema(
       default: 0,
       min: 0
     },
+    couponCode: {
+      type: String,
+      trim: true,
+      default: null
+    },
     totalAmount: {
       type: Number,
       required: true,
@@ -114,8 +121,38 @@ const bookingSchema = new mongoose.Schema(
         ret.status = ret.bookingStatus;
         if (ret.user && ret.user._id) {
           ret.userId = ret.user._id.toString();
+          ret.customerName = ret.user.name;
+          ret.customerEmail = ret.user.email;
+          ret.customerPhone = ret.user.phone;
+        } else if (ret.user && typeof ret.user === "object") {
+          ret.customerName = ret.user.name;
+          ret.customerEmail = ret.user.email;
+          ret.customerPhone = ret.user.phone;
         } else if (ret.user) {
           ret.userId = ret.user.toString();
+        }
+        if (ret.movie && typeof ret.movie === "object") {
+          ret.movieTitle = ret.movie.title;
+          ret.moviePoster = ret.movie.posterUrl;
+        }
+        if (ret.theatre && typeof ret.theatre === "object") {
+          ret.theatreName = ret.theatre.name;
+          ret.theatreLocation = ret.theatre.city || ret.theatre.address;
+        }
+        if (ret.screen && typeof ret.screen === "object") {
+          ret.screenName = ret.screen.name;
+        }
+        if (ret.show && typeof ret.show === "object") {
+          ret.date = ret.show.date;
+          ret.time = ret.show.time;
+          ret.format = ret.show.format;
+        }
+        if (ret.selectedSeats && Array.isArray(ret.selectedSeats) && ret.selectedSeats.length > 0) {
+          ret.seats = ret.selectedSeats;
+          ret.ticketCount = ret.selectedSeats.length;
+        } else if (ret.seats && Array.isArray(ret.seats)) {
+          ret.seats = ret.seats.map((s) => s.seatIdentifier || s);
+          ret.ticketCount = ret.seats.length;
         }
         delete ret.__v;
         return ret;
@@ -128,8 +165,38 @@ const bookingSchema = new mongoose.Schema(
         ret.status = ret.bookingStatus;
         if (ret.user && ret.user._id) {
           ret.userId = ret.user._id.toString();
+          ret.customerName = ret.user.name;
+          ret.customerEmail = ret.user.email;
+          ret.customerPhone = ret.user.phone;
+        } else if (ret.user && typeof ret.user === "object") {
+          ret.customerName = ret.user.name;
+          ret.customerEmail = ret.user.email;
+          ret.customerPhone = ret.user.phone;
         } else if (ret.user) {
           ret.userId = ret.user.toString();
+        }
+        if (ret.movie && typeof ret.movie === "object") {
+          ret.movieTitle = ret.movie.title;
+          ret.moviePoster = ret.movie.posterUrl;
+        }
+        if (ret.theatre && typeof ret.theatre === "object") {
+          ret.theatreName = ret.theatre.name;
+          ret.theatreLocation = ret.theatre.city || ret.theatre.address;
+        }
+        if (ret.screen && typeof ret.screen === "object") {
+          ret.screenName = ret.screen.name;
+        }
+        if (ret.show && typeof ret.show === "object") {
+          ret.date = ret.show.date;
+          ret.time = ret.show.time;
+          ret.format = ret.show.format;
+        }
+        if (ret.selectedSeats && Array.isArray(ret.selectedSeats) && ret.selectedSeats.length > 0) {
+          ret.seats = ret.selectedSeats;
+          ret.ticketCount = ret.selectedSeats.length;
+        } else if (ret.seats && Array.isArray(ret.seats)) {
+          ret.seats = ret.seats.map((s) => s.seatIdentifier || s);
+          ret.ticketCount = ret.seats.length;
         }
         delete ret.__v;
         return ret;
@@ -141,6 +208,9 @@ const bookingSchema = new mongoose.Schema(
 // Indexes
 bookingSchema.index({ user: 1, createdAt: -1 });
 bookingSchema.index({ show: 1, bookingStatus: 1 });
+bookingSchema.index({ bookingStatus: 1, expiresAt: 1 });
+
+bookingSchema.statics.generateReference = generateBookingReference;
 
 const Booking = mongoose.model("Booking", bookingSchema);
 

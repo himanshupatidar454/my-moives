@@ -30,8 +30,16 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      // Unauthorized: token might be expired
-      console.warn('[IMovies API] 401 Unauthorized response from backend');
+      // Unauthorized: clear user session and redirect to /login
+      localStorage.removeItem('imovies_token');
+      localStorage.removeItem('imovies_user_session');
+      if (
+        typeof window !== 'undefined' &&
+        window.location.pathname !== '/login' &&
+        window.location.pathname !== '/register'
+      ) {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

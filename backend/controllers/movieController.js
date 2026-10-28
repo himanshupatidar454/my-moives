@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Movie = require("../models/Movie");
 const ApiResponse = require("../utils/apiResponse");
+const escapeRegex = require("../utils/escapeRegex");
 
 const movieController = {
   // GET /api/movies
@@ -19,7 +20,7 @@ const movieController = {
       const filter = {};
 
       if (search && search.trim()) {
-        const q = search.trim();
+        const q = escapeRegex(search.trim());
         filter.$or = [
           { title: { $regex: q, $options: "i" } },
           { synopsis: { $regex: q, $options: "i" } },
@@ -28,15 +29,18 @@ const movieController = {
       }
 
       if (genre && genre !== "All") {
-        filter.genres = { $in: [new RegExp(`^${genre}$`, "i")] };
+        const escapedGenre = escapeRegex(genre.trim());
+        filter.genres = { $in: [new RegExp(`^${escapedGenre}$`, "i")] };
       }
 
       if (language && language !== "All") {
-        filter.language = { $regex: `^${language}$`, $options: "i" };
+        const escapedLanguage = escapeRegex(language.trim());
+        filter.language = { $regex: `^${escapedLanguage}$`, $options: "i" };
       }
 
       if (status && status !== "all") {
-        filter.releaseStatus = status;
+        const normalizedStatus = typeof status === "string" ? status.replace("_", "-") : status;
+        filter.releaseStatus = normalizedStatus;
       }
 
       let sortOptions = {};
@@ -202,8 +206,8 @@ const movieController = {
         trailerUrl: trailerUrl || "",
         formats: Array.isArray(formats) ? formats : ["2D", "IMAX"],
         featured: Boolean(featured),
-        averageRating: Number(rating) || 8.0,
-        reviewCount: 1
+        averageRating: 0,
+        reviewCount: 0
       });
 
       return ApiResponse.success(
@@ -234,17 +238,70 @@ const movieController = {
         return ApiResponse.error(res, "Movie not found", [], 404);
       }
 
-      const updates = { ...req.body };
-      // Map frontend fields if present
-      if (updates.genre && !updates.genres) {
-        updates.genres = Array.isArray(updates.genre) ? updates.genre : [updates.genre];
+      // Explicit allow-list of editable fields
+      const ALLOWED_FIELDS = [
+        "title",
+        "slug",
+        "synopsis",
+        "posterUrl",
+        "backdropUrl",
+        "genres",
+        "genre",
+        "language",
+        "durationMinutes",
+        "duration",
+        "releaseDate",
+        "releaseStatus",
+        "status",
+        "director",
+        "cast",
+        "crew",
+        "trailerUrl",
+        "formats",
+        "featured"
+      ];
+
+      const updates = {};
+      for (const field of ALLOWED_FIELDS) {
+        if (req.body[field] !== undefined) {
+          updates[field] = req.body[field];
+        }
       }
-      if (updates.duration && !updates.durationMinutes) {
-        updates.durationMinutes = updates.duration;
+
+      // Map frontend aliases if present
+      if (updates.genre !== undefined && updates.genres === undefined) {
+        updates.genres = Array.isArray(updates.genre)
+          ? updates.genre
+          : typeof updates.genre === "string"
+            ? updates.genre.split(",").map((s) => s.trim()).filter(Boolean)
+            : [updates.genre];
+        delete updates.genre;
+      } else if (typeof updates.genres === "string") {
+        updates.genres = updates.genres.split(",").map((s) => s.trim()).filter(Boolean);
       }
-      if (updates.status && !updates.releaseStatus) {
-        updates.releaseStatus = updates.status;
+
+      if (updates.duration !== undefined && updates.durationMinutes === undefined) {
+        updates.durationMinutes = Number(updates.duration);
+        delete updates.duration;
       }
+
+      if (updates.status !== undefined && updates.releaseStatus === undefined) {
+        updates.releaseStatus = updates.status.replace("_", "-");
+        delete updates.status;
+      } else if (typeof updates.releaseStatus === "string") {
+        updates.releaseStatus = updates.releaseStatus.replace("_", "-");
+      }
+
+      if (updates.releaseDate !== undefined) {
+        updates.releaseDate = new Date(updates.releaseDate);
+      }
+
+      // Ratings and review counts must never be editable this way
+      delete updates.averageRating;
+      delete updates.reviewCount;
+      delete updates.rating;
+      delete updates.voteCount;
+      delete updates.ratingCount;
 
       Object.assign(movie, updates);
       await movie.save();
@@ -261,18 +318,45 @@ const movieController = {
   deleteMovie: async (req, res, next) => {
     try {
       const { id } = req.params;
+      const Show = require("../models/Show");
+      const Booking = require("../models/Booking");
 
       let movie = null;
       if (mongoose.Types.ObjectId.isValid(id)) {
-        movie = await Movie.findByIdAndDelete(id);
+        movie = await Movie.findById(id);
       }
       if (!movie) {
-        movie = await Movie.findOneAndDelete({ slug: id.toLowerCase().trim() });
+        movie = await Movie.findOne({ slug: id.toLowerCase().trim() });
       }
 
       if (!movie) {
         return ApiResponse.error(res, "Movie not found", [], 404);
       }
+
+      // Block delete if future shows or confirmed bookings exist to prevent orphaned data
+      const now = new Date();
+      const [futureShowsCount, confirmedBookingsCount] = await Promise.all([
+        Show.countDocuments({
+          movie: movie._id,
+          startTime: { $gt: now },
+          status: { $ne: "cancelled" }
+        }),
+        Booking.countDocuments({
+          movie: movie._id,
+          bookingStatus: "confirmed"
+        })
+      ]);
+
+      if (futureShowsCount > 0 || confirmedBookingsCount > 0) {
+        return ApiResponse.error(
+          res,
+          `Cannot delete movie with ${futureShowsCount} upcoming show(s) or ${confirmedBookingsCount} confirmed booking(s). Archive the movie instead.`,
+          [],
+          400
+        );
+      }
+
+      await Movie.findByIdAndDelete(movie._id);
 
       return ApiResponse.success(res, "Movie deleted successfully", {
         id: movie._id.toString()

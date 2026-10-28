@@ -17,7 +17,8 @@ const paymentController = {
 
       return ApiResponse.success(res, "Payment order initiated successfully", orderData);
     } catch (error) {
-      return ApiResponse.error(res, error.message, [], 400);
+      const status = error.statusCode || 400;
+      return ApiResponse.error(res, error.message, [], status);
     }
   },
 
@@ -41,7 +42,8 @@ const paymentController = {
         verificationResult
       );
     } catch (error) {
-      return ApiResponse.error(res, error.message, [], 400);
+      const status = error.statusCode || 400;
+      return ApiResponse.error(res, error.message, [], status);
     }
   }
 };

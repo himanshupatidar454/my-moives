@@ -49,6 +49,7 @@ const theatreSchema = new mongoose.Schema(
       virtuals: true,
       transform: (doc, ret) => {
         ret.id = ret._id.toString();
+        ret.location = doc.city;
         delete ret.__v;
         return ret;
       }
@@ -57,6 +58,7 @@ const theatreSchema = new mongoose.Schema(
       virtuals: true,
       transform: (doc, ret) => {
         ret.id = ret._id.toString();
+        ret.location = doc.city;
         delete ret.__v;
         return ret;
       }

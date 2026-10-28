@@ -144,7 +144,21 @@ const theatresData = [
   }
 ];
 
-async function seedDatabase() {
+async function seedDatabase(options = {}) {
+  const currentEnv = process.env.NODE_ENV || config.nodeEnv;
+  const isProduction = currentEnv === "production";
+  const hasForce = process.argv.includes("--force") || options.force === true;
+
+  if (isProduction && !hasForce) {
+    const errorMsg =
+      "[Seed Error] Refusing to run database seeder in production environment without explicit --force argument.";
+    console.error(errorMsg);
+    if (require.main === module) {
+      process.exit(1);
+    }
+    throw new Error(errorMsg);
+  }
+
   try {
     console.log("[Seed] Connecting to MongoDB...");
     await mongoose.connect(config.mongodbUri);
@@ -166,8 +180,8 @@ async function seedDatabase() {
 
     // 1. Seed Users
     console.log("[Seed] Seeding users...");
-    const adminPasswordHash = await User.hashPassword("Admin@123456");
-    const userPasswordHash = await User.hashPassword("User@123456");
+    const adminPasswordHash = await User.hashPassword("admin123");
+    const userPasswordHash = await User.hashPassword("password123");
 
     const admin = await User.create({
       name: "Sarah Cinema Manager",
@@ -196,7 +210,7 @@ async function seedDatabase() {
       status: "active"
     });
 
-    console.log(`[Seed] Seeded 1 admin (${admin.email}) and 2 demo users.`);
+    console.log(`[Seed] Seeded admin (admin@imovies.com / admin123) and demo users (alex@imovies.com, david@example.com / password123).`);
 
     // 2. Seed Movies
     console.log("[Seed] Seeding movies...");
@@ -226,32 +240,46 @@ async function seedDatabase() {
 
     // 4. Seed Shows
     console.log("[Seed] Seeding shows and seat inventories...");
-    const sampleTimes = [
+    const sampleTimeSlots = [
       { time: "10:30 AM", h: 10, m: 30 },
-      { time: "02:15 PM", h: 14, m: 15 },
-      { time: "06:00 PM", h: 18, m: 0 },
-      { time: "09:30 PM", h: 21, m: 30 }
+      { time: "02:45 PM", h: 14, m: 45 },
+      { time: "07:00 PM", h: 19, m: 0 }
     ];
 
     let showCount = 0;
     const nowShowingMovies = createdMovies.filter((m) => m.releaseStatus === "now-showing");
 
-    for (const movie of nowShowingMovies) {
-      for (let dayOffset = 0; dayOffset < 5; dayOffset++) {
-        const dateObj = new Date();
-        dateObj.setDate(dateObj.getDate() + dayOffset);
-        const isoDate = dateObj.toISOString().split("T")[0];
+    for (let dayOffset = 0; dayOffset < 5; dayOffset++) {
+      const dateObj = new Date();
+      dateObj.setDate(dateObj.getDate() + dayOffset);
+      const isoDate = dateObj.toISOString().split("T")[0];
 
-        // Seed 2 shows per theatre per day
-        for (const theatre of createdTheatres.slice(0, 3)) {
-          const theatreScreens = allScreens.filter((s) => s.theatre.toString() === theatre._id.toString());
-          const screen = theatreScreens[0] || allScreens[0];
+      // Spread shows across theatres and assign movies to distinct screens without overlaps
+      for (const theatre of createdTheatres.slice(0, 3)) {
+        const theatreScreens = allScreens.filter((s) => s.theatre.toString() === theatre._id.toString());
+        if (theatreScreens.length === 0) continue;
 
-          for (let sIdx = 0; sIdx < 2; sIdx++) {
-            const timeSlot = sampleTimes[sIdx * 2 + (dayOffset % 2)];
+        for (let mIdx = 0; mIdx < nowShowingMovies.length; mIdx++) {
+          const movie = nowShowingMovies[mIdx];
+          // Spread movies across different screens
+          const screen = theatreScreens[mIdx % theatreScreens.length];
+
+          // Use non-overlapping daily time slots
+          const slotsForMovie = (mIdx + dayOffset) % 2 === 0
+            ? [sampleTimeSlots[0], sampleTimeSlots[2]] // 10:30 AM and 07:00 PM
+            : [sampleTimeSlots[1]];                     // 02:45 PM
+
+          for (const timeSlot of slotsForMovie) {
             const start = new Date(dateObj);
             start.setHours(timeSlot.h, timeSlot.m, 0, 0);
             const end = new Date(start.getTime() + (movie.durationMinutes + 30) * 60 * 1000);
+
+            // Check conflicts with the existing hasScheduleConflict helper
+            const conflict = await Show.hasScheduleConflict(screen._id, start, end);
+            if (conflict) {
+              console.warn(`[Seed] Schedule conflict detected for screen ${screen.name} at ${timeSlot.time}. Skipping.`);
+              continue;
+            }
 
             const showDoc = await Show.create({
               movie: movie._id,
@@ -267,7 +295,9 @@ async function seedDatabase() {
               standardPrice: 15.5,
               premiumPrice: 22.0,
               vipPrice: 28.0,
-              status: sIdx === 1 ? "filling_fast" : "available"
+              ticketFee: 1.50,
+              maxSeatsPerBooking: 10,
+              status: "available"
             });
 
             // Initialize seats
@@ -277,7 +307,7 @@ async function seedDatabase() {
         }
       }
     }
-    console.log(`[Seed] Seeded ${showCount} shows with full seat inventories.`);
+    console.log(`[Seed] Seeded ${showCount} non-conflicting shows with full seat inventories.`);
 
     // 5. Seed sample reviews
     console.log("[Seed] Seeding sample reviews...");
@@ -321,10 +351,15 @@ async function seedDatabase() {
 
     console.log("[Seed] Database seeding completed successfully!");
     await mongoose.disconnect();
-    process.exit(0);
+    if (require.main === module) {
+      process.exit(0);
+    }
   } catch (error) {
     console.error("[Seed] Seeding failed:", error);
-    process.exit(1);
+    if (require.main === module) {
+      process.exit(1);
+    }
+    throw error;
   }
 }
 

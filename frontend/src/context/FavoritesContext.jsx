@@ -1,43 +1,100 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-toastify';
-import { mockMovies } from '../data/mockMovies';
+import api from '../services/api';
+import { useAuth } from './AuthContext';
 
 const FavoritesContext = createContext(null);
 const FAVORITES_STORAGE_KEY = 'imovies_favorites';
 
 export const FavoritesProvider = ({ children }) => {
+  const { isAuthenticated } = useAuth();
+  const [favoriteMovies, setFavoriteMovies] = useState([]);
   const [favoriteIds, setFavoriteIds] = useState(() => {
     try {
       const saved = localStorage.getItem(FAVORITES_STORAGE_KEY);
-      return saved ? JSON.parse(saved) : ["mov-001", "mov-002"];
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return ["mov-001", "mov-002"];
+      return [];
     }
   });
 
-  useEffect(() => {
+  // Sync favorites with the real backend when authenticated
+  const fetchFavorites = useCallback(async () => {
+    if (!isAuthenticated) return;
     try {
-      localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favoriteIds));
+      const res = await api.get('/favorites');
+      const list = res.data?.favorites || res.data?.data?.favorites || [];
+      setFavoriteMovies(list);
+      const ids = list.map((m) => m.id || m._id);
+      setFavoriteIds(ids);
+      localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(ids));
     } catch (err) {
-      console.error('Failed to save favorites to localStorage', err);
+      console.warn('[Favorites] Could not sync with backend:', err.message);
     }
-  }, [favoriteIds]);
+  }, [isAuthenticated]);
 
-  const isFavorite = (movieId) => favoriteIds.includes(movieId);
-
-  const toggleFavorite = (movie) => {
-    if (!movie?.id) return;
-    if (favoriteIds.includes(movie.id)) {
-      setFavoriteIds((prev) => prev.filter((id) => id !== movie.id));
-      toast.info(`Removed "${movie.title}" from your favorites`);
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchFavorites();
     } else {
-      setFavoriteIds((prev) => [...prev, movie.id]);
-      toast.success(`Added "${movie.title}" to your favorites!`);
+      // Guest: Read IDs from local storage
+      try {
+        const saved = localStorage.getItem(FAVORITES_STORAGE_KEY);
+        setFavoriteIds(saved ? JSON.parse(saved) : []);
+      } catch {
+        setFavoriteIds([]);
+      }
+    }
+  }, [isAuthenticated, fetchFavorites]);
+
+  const isFavorite = (movieId) => {
+    if (!movieId) return false;
+    return favoriteIds.some((id) => String(id) === String(movieId));
+  };
+
+  const toggleFavorite = async (movie) => {
+    const movieId = movie?.id || movie?._id;
+    if (!movieId) return;
+
+    const currentlyFavorite = isFavorite(movieId);
+
+    if (currentlyFavorite) {
+      // Optimistic update
+      setFavoriteIds((prev) => prev.filter((id) => String(id) !== String(movieId)));
+      setFavoriteMovies((prev) => prev.filter((m) => String(m.id || m._id) !== String(movieId)));
+
+      if (isAuthenticated) {
+        try {
+          await api.delete(`/favorites/${movieId}`);
+          toast.info(`Removed "${movie.title}" from your favorites`);
+        } catch (err) {
+          console.error('[Favorites Error] Failed removing favorite', err);
+          fetchFavorites();
+        }
+      } else {
+        toast.info(`Removed "${movie.title}" from your favorites`);
+      }
+    } else {
+      // Optimistic update
+      setFavoriteIds((prev) => [...prev, movieId]);
+      setFavoriteMovies((prev) => [...prev, movie]);
+
+      if (isAuthenticated) {
+        try {
+          await api.post(`/favorites/${movieId}`);
+          toast.success(`Added "${movie.title}" to your favorites!`);
+        } catch (err) {
+          console.error('[Favorites Error] Failed adding favorite', err);
+          fetchFavorites();
+        }
+      } else {
+        toast.success(`Added "${movie.title}" to your favorites!`);
+      }
     }
   };
 
   const getFavoriteMovies = () => {
-    return mockMovies.filter((m) => favoriteIds.includes(m.id));
+    return favoriteMovies;
   };
 
   return (
@@ -47,7 +104,8 @@ export const FavoritesProvider = ({ children }) => {
         isFavorite,
         toggleFavorite,
         getFavoriteMovies,
-        favoriteCount: favoriteIds.length
+        favoriteCount: favoriteIds.length,
+        refreshFavorites: fetchFavorites
       }}
     >
       {children}

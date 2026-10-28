@@ -1,5 +1,6 @@
 import api from './api';
 import { mockReviews } from '../data/mockReviews';
+import { USE_MOCKS } from '../utils/env';
 
 const REVIEWS_LOCAL_KEY = 'imovies_reviews_cache';
 
@@ -15,41 +16,62 @@ const getStoredReviews = () => {
 };
 
 export const reviewService = {
-  getReviewsByMovie: async (movieId) => {
-    try {
-      const res = await api.get(`/movies/${movieId}/reviews`);
-      if (res.data?.reviews) return { reviews: res.data.reviews, isDemo: false };
-    } catch {
-      // Backend fallback
+  // Get reviews for a specific movie
+  getReviewsByMovie: async (movieId, params = {}) => {
+    if (!USE_MOCKS) {
+      const res = await api.get(`/movies/${movieId}/reviews`, { params });
+      const reviews = res.data?.reviews || res.data?.data?.reviews || [];
+      const total = res.data?.total ?? res.data?.data?.total ?? reviews.length;
+      return { reviews, total, isDemo: false };
     }
 
     const all = getStoredReviews();
     const movieReviews = all.filter((r) => r.movieId === movieId);
-    return { reviews: movieReviews, isDemo: true };
+    return { reviews: movieReviews, total: movieReviews.length, isDemo: true };
   },
 
-  getAllReviewsAdmin: async () => {
-    try {
-      const res = await api.get('/admin/reviews');
-      if (res.data?.reviews) return { reviews: res.data.reviews, isDemo: false };
-    } catch {
-      // Demo
+  // Admin: Get all reviews for moderation
+  getAllReviewsAdmin: async (params = {}) => {
+    if (!USE_MOCKS) {
+      const res = await api.get('/admin/reviews', { params });
+      const reviews = res.data?.reviews || res.data?.data?.reviews || [];
+      const total = res.data?.total ?? res.data?.data?.total ?? reviews.length;
+      return { reviews, total, isDemo: false };
     }
-    return { reviews: getStoredReviews(), isDemo: true };
+
+    const all = getStoredReviews();
+    return { reviews: all, total: all.length, isDemo: true };
   },
 
+  // Submit review
   submitReview: async (reviewData) => {
-    try {
-      const res = await api.post(`/movies/${reviewData.movieId}/reviews`, reviewData);
-      if (res.data?.review) return { success: true, review: res.data.review, isDemo: false };
-    } catch {
-      // Demo fallback
+    const text = reviewData.reviewText || reviewData.comment || reviewData.content || '';
+    const payload = {
+      rating: Number(reviewData.rating),
+      reviewText: text,
+      comment: text
+    };
+
+    if (!USE_MOCKS) {
+      const res = await api.post(`/movies/${reviewData.movieId}/reviews`, payload);
+      const review = res.data?.review || res.data?.data?.review;
+      return {
+        success: true,
+        review,
+        message: res.data?.message || 'Review submitted successfully',
+        isDemo: false
+      };
     }
 
     const all = getStoredReviews();
     const newRev = {
       id: `rev-${Date.now().toString().slice(-4)}`,
-      ...reviewData,
+      movieId: reviewData.movieId,
+      rating: reviewData.rating,
+      content: text,
+      comment: text,
+      author: reviewData.author || 'Cinema Enthusiast',
+      avatar: reviewData.avatar,
       date: new Date().toISOString().split('T')[0],
       likes: 0,
       verifiedPurchase: true
@@ -59,13 +81,17 @@ export const reviewService = {
     return { success: true, review: newRev, isDemo: true };
   },
 
+  // Delete review
   deleteReview: async (reviewId) => {
-    try {
-      await api.delete(`/admin/reviews/${reviewId}`);
-      return { success: true };
-    } catch {
-      // Demo
+    if (!USE_MOCKS) {
+      const res = await api.delete(`/admin/reviews/${reviewId}`);
+      return {
+        success: true,
+        message: res.data?.message || 'Review deleted successfully',
+        isDemo: false
+      };
     }
+
     const all = getStoredReviews();
     const filtered = all.filter((r) => r.id !== reviewId);
     localStorage.setItem(REVIEWS_LOCAL_KEY, JSON.stringify(filtered));

@@ -74,7 +74,7 @@ export const Theatres = () => {
               >
                 <div>
                   <img
-                    src={theatre.image}
+                    src={theatre.image || "https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?w=600&auto=format&fit=crop&q=80"}
                     alt={theatre.name}
                     className="rounded-3 w-100 mb-3 object-fit-cover shadow"
                     style={{ height: '180px' }}

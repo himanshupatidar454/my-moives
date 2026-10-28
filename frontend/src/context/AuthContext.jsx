@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '../services/authService';
+import { USE_MOCKS } from '../utils/env';
 import { toast } from 'react-toastify';
 
 const AuthContext = createContext(null);
@@ -7,30 +8,51 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isDemoMode, setIsDemoMode] = useState(true);
+  const [isDemoMode, setIsDemoMode] = useState(USE_MOCKS);
 
   useEffect(() => {
-    // Check if user session exists in localStorage
-    const saved = authService.getCurrentUser();
-    if (saved) {
-      setUser(saved);
-      setIsDemoMode(true);
-    } else {
-      // Set default demo user session for instant seamless demo testing
-      const defaultUser = {
-        id: "usr-001",
-        name: "Alex Morgan",
-        email: "alex@imovies.com",
-        role: "user",
-        phone: "+1 (555) 349-2819",
-        avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
-        memberSince: "January 2024",
-        status: "active"
-      };
-      setUser(defaultUser);
-      setIsDemoMode(true);
-    }
-    setLoading(false);
+    const initializeAuth = async () => {
+      setLoading(true);
+      const token = localStorage.getItem('imovies_token');
+
+      if (token) {
+        if (!USE_MOCKS) {
+          try {
+            const res = await authService.getMe();
+            if (res?.user) {
+              setUser(res.user);
+              setIsDemoMode(false);
+            } else {
+              authService.logout();
+              setUser(null);
+            }
+          } catch (err) {
+            console.warn('[Auth] Session restoration failed, clearing stale credentials:', err.message);
+            authService.logout();
+            setUser(null);
+          }
+        } else {
+          const saved = authService.getCurrentUser();
+          if (saved) {
+            setUser(saved);
+            setIsDemoMode(true);
+          }
+        }
+      } else {
+        if (USE_MOCKS) {
+          const saved = authService.getCurrentUser();
+          if (saved) {
+            setUser(saved);
+            setIsDemoMode(true);
+          }
+        } else {
+          setUser(null);
+        }
+      }
+      setLoading(false);
+    };
+
+    initializeAuth();
   }, []);
 
   const login = async (email, password) => {
@@ -38,12 +60,20 @@ export const AuthProvider = ({ children }) => {
       const res = await authService.login(email, password);
       if (res.success) {
         setUser(res.user);
-        setIsDemoMode(res.isDemo);
+        setIsDemoMode(Boolean(res.isDemo));
         toast.success(res.message || 'Logged in successfully!');
         return { success: true, user: res.user };
       }
+      return { success: false };
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Login failed. Please check your credentials.');
+      const errorMsg =
+        err.response?.data?.message ||
+        (err.response?.data?.errors && err.response.data.errors[0]?.message) ||
+        (err.response?.data?.errors && err.response.data.errors[0]?.msg) ||
+        err.message ||
+        'Login failed. Please check your credentials.';
+      console.error('[Auth Login Failed]', err.response?.status || 'Network Error', errorMsg);
+      toast.error(errorMsg);
       return { success: false, error: err };
     }
   };
@@ -53,12 +83,20 @@ export const AuthProvider = ({ children }) => {
       const res = await authService.register(userData);
       if (res.success) {
         setUser(res.user);
-        setIsDemoMode(res.isDemo);
+        setIsDemoMode(Boolean(res.isDemo));
         toast.success(res.message || 'Registration successful!');
         return { success: true, user: res.user };
       }
+      return { success: false };
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Registration failed.');
+      const errorMsg =
+        err.response?.data?.message ||
+        (err.response?.data?.errors && err.response.data.errors[0]?.message) ||
+        (err.response?.data?.errors && err.response.data.errors[0]?.msg) ||
+        err.message ||
+        'Registration failed.';
+      console.error('[Auth Register Failed]', err.response?.status || 'Network Error', errorMsg);
+      toast.error(errorMsg);
       return { success: false, error: err };
     }
   };
@@ -70,17 +108,47 @@ export const AuthProvider = ({ children }) => {
   };
 
   const updateProfile = async (data) => {
-    const res = await authService.updateProfile(data);
-    if (res.success) {
-      setUser(res.user);
-      toast.success('Profile updated successfully!');
-      return { success: true };
+    try {
+      const res = await authService.updateProfile(data);
+      if (res.success) {
+        setUser(res.user);
+        toast.success('Profile updated successfully!');
+        return { success: true, user: res.user };
+      }
+    } catch (err) {
+      const errorMsg =
+        err.response?.data?.message ||
+        (err.response?.data?.errors && err.response.data.errors[0]?.message) ||
+        err.message ||
+        'Failed to update profile.';
+      toast.error(errorMsg);
+      return { success: false, error: err };
     }
     return { success: false };
   };
 
-  // Quick switch role utility for effortless evaluation
+  const changePassword = async (currentPassword, newPassword) => {
+    try {
+      const res = await authService.changePassword(currentPassword, newPassword);
+      if (res.success) {
+        toast.success(res.message || 'Password changed successfully!');
+        return { success: true };
+      }
+    } catch (err) {
+      const errorMsg =
+        err.response?.data?.message ||
+        (err.response?.data?.errors && err.response.data.errors[0]?.message) ||
+        err.message ||
+        'Failed to change password.';
+      toast.error(errorMsg);
+      return { success: false, error: err };
+    }
+    return { success: false };
+  };
+
+  // Quick switch role utility - only enabled when explicit USE_MOCKS is true
   const switchDemoRole = (targetRole) => {
+    if (!USE_MOCKS) return;
     if (targetRole === 'admin') {
       const adminUser = {
         id: "adm-001",
@@ -120,11 +188,13 @@ export const AuthProvider = ({ children }) => {
         isAuthenticated: !!user,
         isAdmin: user?.role === 'admin',
         isDemoMode,
+        useMocks: USE_MOCKS,
         loading,
         login,
         register,
         logout,
         updateProfile,
+        changePassword,
         switchDemoRole
       }}
     >

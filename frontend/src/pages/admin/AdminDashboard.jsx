@@ -47,12 +47,12 @@ export const AdminDashboard = () => {
   }
 
   const statCards = [
-    { title: 'Total Movies', value: stats?.totalMovies || 10, icon: IconFilm, link: '/admin/movies', color: '#E50914' },
-    { title: 'Cinema Theatres', value: stats?.totalTheatres || 6, icon: IconBuilding, link: '/admin/theatres', color: '#38BDF8' },
-    { title: 'Upcoming Shows', value: stats?.upcomingShows || 48, icon: IconClock, link: '/admin/shows', color: '#F59E0B' },
-    { title: 'Total Bookings', value: stats?.totalBookings || 184, icon: IconTicket, link: '/admin/bookings', color: '#22C55E' },
-    { title: 'Revenue (Confirmed)', value: `$${Number(stats?.totalRevenue || 28450).toLocaleString()}`, icon: IconTrending, link: '/admin/reports', color: '#A855F7' },
-    { title: 'Registered Users', value: stats?.registeredUsers || 1420, icon: IconUsers, link: '/admin/users', color: '#EC4899' }
+    { title: 'Total Movies', value: stats?.totalMovies ?? 0, icon: IconFilm, link: '/admin/movies', color: '#E50914' },
+    { title: 'Cinema Theatres', value: stats?.totalTheatres ?? 0, icon: IconBuilding, link: '/admin/theatres', color: '#38BDF8' },
+    { title: 'Upcoming Shows', value: stats?.upcomingShows ?? 0, icon: IconClock, link: '/admin/shows', color: '#F59E0B' },
+    { title: 'Total Bookings', value: stats?.totalBookings ?? 0, icon: IconTicket, link: '/admin/bookings', color: '#22C55E' },
+    { title: 'Revenue (Confirmed)', value: `$${Number(stats?.totalRevenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, icon: IconTrending, link: '/admin/reports', color: '#A855F7' },
+    { title: 'Registered Users', value: stats?.registeredUsers ?? 0, icon: IconUsers, link: '/admin/users', color: '#EC4899' }
   ];
 
   return (

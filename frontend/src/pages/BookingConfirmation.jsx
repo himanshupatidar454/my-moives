@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useLocation, Link } from 'react-router-dom';
 import { bookingService } from '../services/bookingService';
+import { USE_MOCKS } from '../utils/env';
+import { toast } from 'react-toastify';
 import {
   IconCheck,
   IconPrinter,
@@ -22,9 +24,14 @@ export const BookingConfirmation = () => {
     if (!booking && bookingId) {
       const fetchBooking = async () => {
         setLoading(true);
-        const res = await bookingService.getBookingById(bookingId);
-        setBooking(res.booking);
-        setLoading(false);
+        try {
+          const res = await bookingService.getBookingById(bookingId);
+          setBooking(res.booking);
+        } catch (err) {
+          toast.error(err.response?.data?.message || 'Failed to retrieve booking');
+        } finally {
+          setLoading(false);
+        }
       };
       fetchBooking();
     }
@@ -53,6 +60,20 @@ export const BookingConfirmation = () => {
     );
   }
 
+  const movieTitle = booking.movieTitle || booking.movie?.title || 'Cinema Feature';
+  const moviePoster = booking.moviePoster || booking.movie?.posterUrl || "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=400&auto=format&fit=crop&q=80";
+  const theatreName = booking.theatreName || booking.theatre?.name || 'IMovies Cinema';
+  const theatreLocation = booking.theatreLocation || booking.theatre?.city || booking.theatre?.address || '';
+  const showFormat = booking.format || booking.show?.format || '2D';
+  const showDate = booking.date || booking.show?.date || '';
+  const showTime = booking.time || booking.show?.time || '';
+  const screenName = booking.screenName || booking.screen?.name || 'Screen 1';
+  const seatsList = Array.isArray(booking.seats)
+    ? booking.seats.map((s) => (typeof s === 'string' ? s : s.seatIdentifier)).join(', ')
+    : (booking.selectedSeats?.join(', ') || booking.seats || '');
+  const ticketCount = booking.ticketCount || (Array.isArray(booking.seats) ? booking.seats.length : (booking.selectedSeats?.length || 1));
+  const totalPaid = Number(booking.totalAmount || 0).toFixed(2);
+
   return (
     <div className="container py-5">
       {/* Top success badge banner */}
@@ -65,13 +86,15 @@ export const BookingConfirmation = () => {
         </div>
         <h2 className="fw-extrabold text-white mb-2">Booking Confirmed!</h2>
         <p className="text-white-50 fs-6 mx-auto" style={{ maxWidth: '480px' }}>
-          Your cinema tickets have been booked and confirmed. An e-ticket receipt has been simulated for your account.
+          Your cinema tickets have been booked and confirmed. An e-ticket receipt is ready below.
         </p>
 
-        <div className="d-inline-flex align-items-center gap-2 badge bg-danger bg-opacity-25 text-danger border border-danger border-opacity-25 px-3 py-1">
-          <IconSparkles size={14} />
-          Demo Mode Confirmation (Express Ready)
-        </div>
+        {USE_MOCKS && (
+          <div className="d-inline-flex align-items-center gap-2 badge bg-danger bg-opacity-25 text-danger border border-danger border-opacity-25 px-3 py-1">
+            <IconSparkles size={14} />
+            Demo Mode Confirmation
+          </div>
+        )}
       </div>
 
       {/* TICKET STUB CARD */}
@@ -101,7 +124,7 @@ export const BookingConfirmation = () => {
 
           <div className="text-end">
             <span className="text-white-50 small d-block">Booking Reference</span>
-            <span className="fw-mono fs-5 fw-bold text-danger">{booking.id}</span>
+            <span className="fw-mono fs-5 fw-bold text-danger">{booking.id || booking.bookingReference}</span>
           </div>
         </div>
 
@@ -109,26 +132,26 @@ export const BookingConfirmation = () => {
         <div className="row g-4 align-items-center mb-4">
           <div className="col-12 col-sm-4 text-center text-sm-start">
             <img
-              src={booking.moviePoster || "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=400&auto=format&fit=crop&q=80"}
-              alt={booking.movieTitle}
+              src={moviePoster}
+              alt={movieTitle}
               className="rounded-3 shadow-lg object-fit-cover"
               style={{ width: '130px', height: '180px' }}
             />
           </div>
 
           <div className="col-12 col-sm-8">
-            <span className="badge bg-danger rounded-pill px-2 py-0 mb-2">{booking.format}</span>
-            <h4 className="fw-bold text-white mb-2">{booking.movieTitle}</h4>
+            <span className="badge bg-danger rounded-pill px-2 py-0 mb-2">{showFormat}</span>
+            <h4 className="fw-bold text-white mb-2">{movieTitle}</h4>
             <p className="text-white-50 small mb-2 d-flex align-items-center gap-1">
               <IconMapPin size={14} className="text-danger" />
-              {booking.theatreName} — {booking.theatreLocation}
+              {theatreName} {theatreLocation ? `— ${theatreLocation}` : ''}
             </p>
             <p className="text-white-50 small mb-2 d-flex align-items-center gap-1">
               <IconClock size={14} className="text-danger" />
-              {booking.date} at <strong className="text-white ms-1">{booking.time}</strong>
+              {showDate} at <strong className="text-white ms-1">{showTime}</strong>
             </p>
             <p className="text-white-50 small mb-0">
-              Screen: <strong className="text-white">{booking.screenName}</strong>
+              Screen: <strong className="text-white">{screenName}</strong>
             </p>
           </div>
         </div>
@@ -141,15 +164,15 @@ export const BookingConfirmation = () => {
           <div className="row g-2 text-center">
             <div className="col-4 border-end border-secondary border-opacity-25">
               <small className="text-white-50 d-block">Seats</small>
-              <strong className="text-white fs-6">{Array.isArray(booking.seats) ? booking.seats.join(', ') : booking.seats}</strong>
+              <strong className="text-white fs-6">{seatsList}</strong>
             </div>
             <div className="col-4 border-end border-secondary border-opacity-25">
               <small className="text-white-50 d-block">Quantity</small>
-              <strong className="text-white fs-6">{booking.ticketCount} Tickets</strong>
+              <strong className="text-white fs-6">{ticketCount} Tickets</strong>
             </div>
             <div className="col-4">
               <small className="text-white-50 d-block">Total Paid</small>
-              <strong className="text-danger fs-6">${Number(booking.totalAmount).toFixed(2)}</strong>
+              <strong className="text-danger fs-6">${totalPaid}</strong>
             </div>
           </div>
         </div>
@@ -166,7 +189,7 @@ export const BookingConfirmation = () => {
             </div>
           </div>
 
-          {/* Realistic SVG QR Code Simulator */}
+          {/* SVG QR Code */}
           <div className="p-2 rounded-2 bg-white d-inline-flex flex-column align-items-center">
             <svg width="84" height="84" viewBox="0 0 100 100" fill="#000000">
               <rect width="100" height="100" fill="#FFFFFF"/>
@@ -182,7 +205,6 @@ export const BookingConfirmation = () => {
               <rect x="15" y="70" width="15" height="15" fill="#FFFFFF"/>
               <rect x="18" y="73" width="9" height="9" fill="#000000"/>
 
-              {/* Data matrix dots */}
               <rect x="42" y="15" width="8" height="8"/>
               <rect x="52" y="25" width="8" height="8"/>
               <rect x="42" y="42" width="16" height="16"/>

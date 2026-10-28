@@ -1,5 +1,6 @@
 import api from './api';
 import { mockTheatres } from '../data/mockTheatres';
+import { USE_MOCKS } from '../utils/env';
 
 const THEATRES_LOCAL_KEY = 'imovies_theatres_cache';
 
@@ -17,13 +18,10 @@ const getStoredTheatres = () => {
 export const theatreService = {
   // Get all theatres, optionally filtered by city
   getTheatres: async (city = null) => {
-    try {
-      const res = await api.get('/theatres', { params: { city } });
-      if (res.data?.theatres) {
-        return { theatres: res.data.theatres, isDemo: false };
-      }
-    } catch {
-      // Backend fallback
+    if (!USE_MOCKS) {
+      const res = await api.get('/theatres', { params: city && city !== 'All' ? { city } : {} });
+      const theatres = res.data?.theatres || res.data?.data?.theatres || [];
+      return { theatres, isDemo: false };
     }
 
     let list = [...getStoredTheatres()];
@@ -33,25 +31,40 @@ export const theatreService = {
     return { theatres: list, isDemo: true };
   },
 
+  // Get single theatre by ID
   getTheatreById: async (id) => {
-    try {
+    if (!USE_MOCKS) {
       const res = await api.get(`/theatres/${id}`);
-      if (res.data?.theatre) return { theatre: res.data.theatre, isDemo: false };
-    } catch {
-      // Demo
+      const theatre = res.data?.theatre || res.data?.data?.theatre;
+      if (theatre) return { theatre, isDemo: false };
+      throw new Error('Theatre not found');
     }
+
     const list = getStoredTheatres();
     const theatre = list.find((t) => t.id === id);
     return { theatre: theatre || null, isDemo: true };
   },
 
-  createTheatre: async (theatreData) => {
-    try {
-      const res = await api.post('/theatres', theatreData);
-      if (res.data?.theatre) return { success: true, theatre: res.data.theatre };
-    } catch {
-      // Demo
+  // Get screens for a theatre
+  getTheatreScreens: async (theatreId) => {
+    if (!USE_MOCKS) {
+      const res = await api.get(`/theatres/${theatreId}/screens`);
+      const screens = res.data?.screens || res.data?.data?.screens || [];
+      return { screens, isDemo: false };
     }
+
+    return { screens: [], isDemo: true };
+  },
+
+  // Admin: Create theatre
+  createTheatre: async (theatreData) => {
+    if (!USE_MOCKS) {
+      const res = await api.post('/theatres', theatreData);
+      const theatre = res.data?.theatre || res.data?.data?.theatre;
+      if (theatre) return { success: true, theatre, isDemo: false };
+      throw new Error('Failed to create theatre');
+    }
+
     const current = getStoredTheatres();
     const newTheatre = {
       ...theatreData,
@@ -66,13 +79,15 @@ export const theatreService = {
     return { success: true, theatre: newTheatre, isDemo: true };
   },
 
+  // Admin: Update theatre
   updateTheatre: async (id, updatedFields) => {
-    try {
+    if (!USE_MOCKS) {
       const res = await api.put(`/theatres/${id}`, updatedFields);
-      if (res.data?.theatre) return { success: true, theatre: res.data.theatre };
-    } catch {
-      // Demo
+      const theatre = res.data?.theatre || res.data?.data?.theatre;
+      if (theatre) return { success: true, theatre, isDemo: false };
+      throw new Error('Failed to update theatre');
     }
+
     const current = getStoredTheatres();
     const idx = current.findIndex((t) => t.id === id);
     if (idx !== -1) {
@@ -83,13 +98,13 @@ export const theatreService = {
     return { success: false, message: 'Theatre not found' };
   },
 
+  // Admin: Delete theatre
   deleteTheatre: async (id) => {
-    try {
-      await api.delete(`/theatres/${id}`);
-      return { success: true };
-    } catch {
-      // Demo
+    if (!USE_MOCKS) {
+      const res = await api.delete(`/theatres/${id}`);
+      return { success: true, message: res.data?.message, isDemo: false };
     }
+
     const current = getStoredTheatres();
     const filtered = current.filter((t) => t.id !== id);
     localStorage.setItem(THEATRES_LOCAL_KEY, JSON.stringify(filtered));

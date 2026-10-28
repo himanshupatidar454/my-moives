@@ -1,9 +1,10 @@
 import api from './api';
 import { mockMovies } from '../data/mockMovies';
+import { USE_MOCKS } from '../utils/env';
 
 const MOVIES_LOCAL_KEY = 'imovies_movies_cache';
 
-// Initialize local mutable storage for mock movies so admin CRUD persists during session
+// Initialize local mutable storage for mock movies when explicit mock mode is on
 const getStoredMovies = () => {
   try {
     const cached = localStorage.getItem(MOVIES_LOCAL_KEY);
@@ -20,13 +21,11 @@ const getStoredMovies = () => {
 export const movieService = {
   // Fetch all movies with optional search, genre, language, status, and sorting
   getMovies: async (params = {}) => {
-    try {
+    if (!USE_MOCKS) {
       const res = await api.get('/movies', { params });
-      if (res.data && Array.isArray(res.data.movies)) {
-        return { movies: res.data.movies, total: res.data.total || res.data.movies.length, isDemo: false };
-      }
-    } catch {
-      // Backend not yet connected, use mock movies
+      const movies = res.data?.movies || res.data?.data?.movies || [];
+      const total = res.data?.total ?? res.data?.data?.total ?? movies.length;
+      return { movies, total, isDemo: false };
     }
 
     let list = [...getStoredMovies()];
@@ -50,7 +49,8 @@ export const movieService = {
     }
 
     if (status && status !== 'all') {
-      list = list.filter((m) => m.status === status);
+      const normStatus = status.replace('_', '-');
+      list = list.filter((m) => m.status === status || m.status === normStatus);
     }
 
     // Sorting
@@ -61,7 +61,6 @@ export const movieService = {
     } else if (sortBy === 'title') {
       list.sort((a, b) => a.title.localeCompare(b.title));
     } else {
-      // Default: popularity / rating
       list.sort((a, b) => (b.voteCount || 0) - (a.voteCount || 0));
     }
 
@@ -70,13 +69,13 @@ export const movieService = {
 
   // Get single movie by ID or slug
   getMovieById: async (id) => {
-    try {
+    if (!USE_MOCKS) {
       const res = await api.get(`/movies/${id}`);
-      if (res.data?.movie) {
-        return { movie: res.data.movie, isDemo: false };
+      const movie = res.data?.movie || res.data?.data?.movie;
+      if (movie) {
+        return { movie, isDemo: false };
       }
-    } catch {
-      // Backend fallback
+      throw new Error('Movie not found');
     }
 
     const movies = getStoredMovies();
@@ -86,27 +85,39 @@ export const movieService = {
 
   // Get featured movies for home banner
   getFeaturedMovies: async () => {
-    const { movies } = await movieService.getMovies();
+    if (!USE_MOCKS) {
+      try {
+        const res = await api.get('/movies/featured');
+        const movies = res.data?.movies || res.data?.data?.movies;
+        if (Array.isArray(movies) && movies.length > 0) return movies;
+      } catch (err) {
+        console.warn('Could not fetch /movies/featured, falling back to top rated in list:', err.message);
+      }
+      const { movies } = await movieService.getMovies();
+      return movies.filter((m) => m.featured || (m.rating && m.rating >= 8.5));
+    }
+
+    const movies = getStoredMovies();
     return movies.filter((m) => m.featured || m.rating >= 8.5);
   },
 
   // Admin: Create new movie
   createMovie: async (movieData) => {
-    try {
+    if (!USE_MOCKS) {
       const res = await api.post('/movies', movieData);
-      if (res.data?.movie) {
-        return { success: true, movie: res.data.movie };
+      const movie = res.data?.movie || res.data?.data?.movie;
+      if (movie) {
+        return { success: true, movie, isDemo: false };
       }
-    } catch {
-      // Demo fallback
+      throw new Error('Failed to create movie');
     }
 
     const currentList = getStoredMovies();
     const newMovie = {
       ...movieData,
       id: `mov-${Date.now().toString().slice(-4)}`,
-      rating: movieData.rating || 8.0,
-      voteCount: 1,
+      rating: movieData.rating || 0,
+      voteCount: 0,
       formats: movieData.formats || ["2D", "IMAX"],
       genre: Array.isArray(movieData.genre) ? movieData.genre : (movieData.genre ? movieData.genre.split(',').map(s => s.trim()) : ["Action"]),
       durationFormatted: `${Math.floor(movieData.duration / 60)}h ${movieData.duration % 60}m`
@@ -119,13 +130,13 @@ export const movieService = {
 
   // Admin: Update movie
   updateMovie: async (id, updatedFields) => {
-    try {
+    if (!USE_MOCKS) {
       const res = await api.put(`/movies/${id}`, updatedFields);
-      if (res.data?.movie) {
-        return { success: true, movie: res.data.movie };
+      const movie = res.data?.movie || res.data?.data?.movie;
+      if (movie) {
+        return { success: true, movie, isDemo: false };
       }
-    } catch {
-      // Demo fallback
+      throw new Error('Failed to update movie');
     }
 
     const currentList = getStoredMovies();
@@ -140,11 +151,9 @@ export const movieService = {
 
   // Admin: Delete movie
   deleteMovie: async (id) => {
-    try {
-      await api.delete(`/movies/${id}`);
-      return { success: true };
-    } catch {
-      // Demo fallback
+    if (!USE_MOCKS) {
+      const res = await api.delete(`/movies/${id}`);
+      return { success: true, message: res.data?.message, isDemo: false };
     }
 
     const currentList = getStoredMovies();

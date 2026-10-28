@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Theatre = require("../models/Theatre");
 const Screen = require("../models/Screen");
 const ApiResponse = require("../utils/apiResponse");
+const escapeRegex = require("../utils/escapeRegex");
 
 const theatreController = {
   // GET /api/theatres
@@ -11,7 +12,8 @@ const theatreController = {
       const filter = { status: "active" };
 
       if (city && city !== "All") {
-        filter.city = new RegExp(`^${city}$`, "i");
+        const escapedCity = escapeRegex(city.trim());
+        filter.city = new RegExp(`^${escapedCity}$`, "i");
       }
 
       const theatres = await Theatre.find(filter).sort({ name: 1 });
@@ -112,7 +114,25 @@ const theatreController = {
         return ApiResponse.error(res, "Invalid theatre ID format", [], 400);
       }
 
-      const updated = await Theatre.findByIdAndUpdate(id, req.body, {
+      // Explicit allow-list of editable fields
+      const ALLOWED_FIELDS = [
+        "name",
+        "address",
+        "city",
+        "amenities",
+        "screensCount",
+        "rating",
+        "status"
+      ];
+
+      const updates = {};
+      for (const field of ALLOWED_FIELDS) {
+        if (req.body[field] !== undefined) {
+          updates[field] = req.body[field];
+        }
+      }
+
+      const updated = await Theatre.findByIdAndUpdate(id, updates, {
         returnDocument: "after",
         runValidators: true
       });
@@ -137,16 +157,43 @@ const theatreController = {
         return ApiResponse.error(res, "Invalid theatre ID format", [], 400);
       }
 
-      const deleted = await Theatre.findByIdAndDelete(id);
-      if (!deleted) {
+      const theatre = await Theatre.findById(id);
+      if (!theatre) {
         return ApiResponse.error(res, "Theatre not found", [], 404);
       }
 
+      const Show = require("../models/Show");
+      const Booking = require("../models/Booking");
+
+      // Block delete if future shows or confirmed bookings exist to prevent orphaned data
+      const now = new Date();
+      const [futureShowsCount, confirmedBookingsCount] = await Promise.all([
+        Show.countDocuments({
+          theatre: id,
+          startTime: { $gt: now },
+          status: { $ne: "cancelled" }
+        }),
+        Booking.countDocuments({
+          theatre: id,
+          bookingStatus: "confirmed"
+        })
+      ]);
+
+      if (futureShowsCount > 0 || confirmedBookingsCount > 0) {
+        return ApiResponse.error(
+          res,
+          `Cannot delete theatre with ${futureShowsCount} upcoming show(s) or ${confirmedBookingsCount} confirmed booking(s). Mark the theatre inactive instead.`,
+          [],
+          400
+        );
+      }
+
+      await Theatre.findByIdAndDelete(id);
       // Cleanup associated screens
       await Screen.deleteMany({ theatre: id });
 
       return ApiResponse.success(res, "Theatre and screens deleted successfully", {
-        id: deleted._id.toString()
+        id: theatre._id.toString()
       });
     } catch (error) {
       next(error);

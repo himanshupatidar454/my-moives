@@ -29,6 +29,7 @@ export const MyBookings = () => {
       const res = await bookingService.getUserBookings(user?.id);
       setBookings(res.bookings || []);
     } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed fetching user bookings');
       console.error('Failed fetching user bookings', err);
     } finally {
       setLoading(false);
@@ -57,13 +58,13 @@ export const MyBookings = () => {
     try {
       const res = await bookingService.cancelBooking(selectedBookingToCancel.id);
       if (res.success) {
-        toast.info(`Booking ${selectedBookingToCancel.id} has been cancelled. Refund simulated.`);
+        toast.info(res.message || `Booking ${selectedBookingToCancel.id} has been cancelled.`);
         setCancelModalOpen(false);
         setSelectedBookingToCancel(null);
         fetchBookings();
       }
-    } catch {
-      toast.error('Failed to cancel booking.');
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message || 'Failed to cancel booking.');
     }
   };
 
@@ -175,7 +176,7 @@ export const MyBookings = () => {
                     <div className="d-flex flex-column gap-1 text-white-50 small">
                       <span className="d-flex align-items-center gap-1">
                         <IconMapPin size={13} className="text-danger" />
-                        {b.theatreName} ({b.theatreLocation}) • {b.screenName}
+                        {b.theatreName} {b.theatreLocation ? `(${b.theatreLocation})` : ''} • {b.screenName || 'Auditorium'}
                       </span>
                       <span className="d-flex align-items-center gap-1">
                         <IconCalendar size={13} className="text-danger" />

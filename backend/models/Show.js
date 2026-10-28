@@ -65,6 +65,14 @@ const showSchema = new mongoose.Schema(
       type: Number,
       default: 28.00
     },
+    ticketFee: {
+      type: Number,
+      default: 1.50
+    },
+    maxSeatsPerBooking: {
+      type: Number,
+      default: 10
+    },
     status: {
       type: String,
       enum: ["available", "filling_fast", "almost_full", "sold_out", "cancelled", "completed"],
@@ -93,6 +101,15 @@ const showSchema = new mongoose.Schema(
         } else if (doc.screen) {
           ret.screenId = doc.screen.toString();
         }
+        ret.ticketFee = doc.ticketFee ?? 1.50;
+        ret.maxSeatsPerBooking = doc.maxSeatsPerBooking ?? 10;
+        ret.pricing = {
+          standardPrice: ret.standardPrice,
+          premiumPrice: ret.premiumPrice,
+          vipPrice: ret.vipPrice ?? 28.00,
+          ticketFee: ret.ticketFee,
+          maxSeatsPerBooking: ret.maxSeatsPerBooking
+        };
         delete ret.__v;
         return ret;
       }
@@ -116,6 +133,15 @@ const showSchema = new mongoose.Schema(
         } else if (doc.screen) {
           ret.screenId = doc.screen.toString();
         }
+        ret.ticketFee = doc.ticketFee ?? 1.50;
+        ret.maxSeatsPerBooking = doc.maxSeatsPerBooking ?? 10;
+        ret.pricing = {
+          standardPrice: ret.standardPrice,
+          premiumPrice: ret.premiumPrice,
+          vipPrice: ret.vipPrice ?? 28.00,
+          ticketFee: ret.ticketFee,
+          maxSeatsPerBooking: ret.maxSeatsPerBooking
+        };
         delete ret.__v;
         return ret;
       }

@@ -4,7 +4,7 @@ import { toast } from 'react-toastify';
 import { IconCheck } from '../components/common/Icons';
 
 export const Profile = () => {
-  const { user, isAdmin, updateProfile } = useAuth();
+  const { user, isAdmin, updateProfile, changePassword } = useAuth();
 
   const [activeTab, setActiveTab] = useState('personal');
 
@@ -28,8 +28,12 @@ export const Profile = () => {
     });
   };
 
-  const handlePasswordChange = (e) => {
+  const handlePasswordChange = async (e) => {
     e.preventDefault();
+    if (!currentPassword) {
+      toast.warning('Please enter your current password.');
+      return;
+    }
     if (newPassword !== confirmNewPassword) {
       toast.error('New passwords do not match.');
       return;
@@ -38,10 +42,12 @@ export const Profile = () => {
       toast.error('New password must be at least 6 characters.');
       return;
     }
-    toast.success('Password updated successfully! (Simulated for demo session)');
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmNewPassword('');
+    const res = await changePassword(currentPassword, newPassword);
+    if (res?.success) {
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+    }
   };
 
   return (

@@ -36,7 +36,7 @@ export const Favorites = () => {
       ) : (
         <div className="row g-4">
           {movies.map((movie) => (
-            <div key={movie.id} className="col-12 col-sm-6 col-md-4 col-lg-3">
+            <div key={movie.id || movie._id} className="col-12 col-sm-6 col-md-4 col-lg-3">
               <MovieCard movie={movie} />
             </div>
           ))}

@@ -3,6 +3,7 @@ import { useParams, useLocation, useNavigate, Link } from 'react-router-dom';
 import { showService } from '../services/showService';
 import { movieService } from '../services/movieService';
 import { theatreService } from '../services/theatreService';
+import { createShowSocket } from '../services/socketService';
 import { CinemaScreen } from '../components/seats/CinemaScreen';
 import { SeatLegend } from '../components/seats/SeatLegend';
 import { SeatGrid } from '../components/seats/SeatGrid';
@@ -24,9 +25,8 @@ export const SeatSelection = () => {
 
   const [seatRows, setSeatRows] = useState([]);
   const [selectedSeats, setSelectedSeats] = useState([]);
+  const [pricingInfo, setPricingInfo] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  const MAX_SEATS_PER_BOOKING = 8;
 
   useEffect(() => {
     const initData = async () => {
@@ -34,9 +34,16 @@ export const SeatSelection = () => {
       try {
         // Fetch show details if not passed through location state
         let currentShow = show;
+        let pricing = null;
+        let fee = null;
+        let maxSeats = null;
+
         if (!currentShow) {
           const showRes = await showService.getShowById(showId);
           currentShow = showRes.show;
+          pricing = showRes.pricing;
+          fee = showRes.ticketFee;
+          maxSeats = showRes.maxSeatsPerBooking;
           setShow(currentShow);
         }
 
@@ -55,7 +62,16 @@ export const SeatSelection = () => {
         // Fetch seat layout matrix
         const seatRes = await showService.getSeatLayoutForShow(showId);
         setSeatRows(seatRes.seatLayout || []);
+
+        setPricingInfo({
+          standardPrice: seatRes.pricing?.standardPrice ?? pricing?.standardPrice ?? currentShow?.standardPrice ?? 14.50,
+          premiumPrice: seatRes.pricing?.premiumPrice ?? pricing?.premiumPrice ?? currentShow?.premiumPrice ?? 21.00,
+          vipPrice: seatRes.pricing?.vipPrice ?? pricing?.vipPrice ?? currentShow?.vipPrice ?? 28.00,
+          ticketFee: seatRes.ticketFee ?? fee ?? currentShow?.ticketFee ?? 1.50,
+          maxSeatsPerBooking: seatRes.maxSeatsPerBooking ?? maxSeats ?? currentShow?.maxSeatsPerBooking ?? 10
+        });
       } catch (err) {
+        toast.error(err.response?.data?.message || 'Failed loading seating data.');
         console.error('Failed loading seating data', err);
       } finally {
         setLoading(false);
@@ -64,32 +80,116 @@ export const SeatSelection = () => {
     initData();
   }, [showId]);
 
+  // Real-time seat inventory synchronization via Socket.IO
+  useEffect(() => {
+    if (!showId) return;
+
+    const socket = createShowSocket();
+
+    // Join the show's room on entry
+    socket.emit('join-show', showId);
+
+    // Update seat grid when seats-updated events arrive
+    socket.on('seats-updated', (data) => {
+      if (!data || (data.showId && data.showId.toString() !== showId.toString())) return;
+
+      const updatedMap = new Map();
+      if (Array.isArray(data.seats)) {
+        data.seats.forEach((s) => {
+          if (s && s.id) {
+            updatedMap.set(s.id, s.status);
+          }
+        });
+      }
+
+      if (updatedMap.size === 0) return;
+
+      // Update seat grid
+      setSeatRows((prevRows) =>
+        prevRows.map((rowObj) => ({
+          ...rowObj,
+          seats: rowObj.seats.map((seat) => {
+            if (updatedMap.has(seat.id)) {
+              return {
+                ...seat,
+                status: updatedMap.get(seat.id)
+              };
+            }
+            return seat;
+          })
+        }))
+      );
+
+      // If a seat the user has selected is taken by someone else, remove it and show a message
+      setSelectedSeats((prevSelected) => {
+        const takenSeats = [];
+        const keptSeats = [];
+
+        for (const seat of prevSelected) {
+          const newStatus = updatedMap.get(seat.id);
+          if (newStatus && newStatus !== 'available') {
+            takenSeats.push(seat.id);
+          } else {
+            keptSeats.push(seat);
+          }
+        }
+
+        if (takenSeats.length > 0) {
+          toast.info(
+            `Seat${takenSeats.length > 1 ? 's' : ''} ${takenSeats.join(', ')} was just reserved by another customer and removed from your selection.`
+          );
+        }
+
+        return keptSeats;
+      });
+    });
+
+    return () => {
+      // Leave show's room on exit and disconnect
+      socket.emit('leave-show', showId);
+      socket.disconnect();
+    };
+  }, [showId]);
+
+  // Authoritative prices and limits from show/seat layout
+  const standardPrice = pricingInfo?.standardPrice ?? show?.standardPrice ?? 14.50;
+  const premiumPrice = pricingInfo?.premiumPrice ?? show?.premiumPrice ?? 21.00;
+  const vipPrice = pricingInfo?.vipPrice ?? show?.vipPrice ?? 28.00;
+  const ticketFee = pricingInfo?.ticketFee ?? show?.ticketFee ?? 1.50;
+  const maxSeatsPerBooking = pricingInfo?.maxSeatsPerBooking ?? show?.maxSeatsPerBooking ?? 10;
+
   // Toggle seat selection
   const handleToggleSeat = (seat) => {
-    if (seat.status === 'occupied') return;
+    const isUnavailable =
+      seat.status === 'occupied' ||
+      seat.status === 'reserved' ||
+      seat.status === 'booked' ||
+      seat.status === 'unavailable';
+    if (isUnavailable) return;
 
     const exists = selectedSeats.some((s) => s.id === seat.id);
     if (exists) {
       setSelectedSeats((prev) => prev.filter((s) => s.id !== seat.id));
     } else {
-      if (selectedSeats.length >= MAX_SEATS_PER_BOOKING) {
-        toast.warning(`You can select a maximum of ${MAX_SEATS_PER_BOOKING} seats per transaction.`);
+      if (selectedSeats.length >= maxSeatsPerBooking) {
+        toast.warning(`You can select a maximum of ${maxSeatsPerBooking} seats per transaction.`);
         return;
       }
       setSelectedSeats((prev) => [...prev, seat]);
     }
   };
 
-  // Price calculations
-  const standardPrice = show?.standardPrice || 14.50;
-  const premiumPrice = show?.premiumPrice || 21.00;
-
+  // Price calculations with server-configured prices: VIP seats use VIP price!
   const subtotal = selectedSeats.reduce((sum, seat) => {
-    const isPremium = seat.type === 'premium' || seat.type === 'vip';
-    return sum + (isPremium ? premiumPrice : standardPrice);
+    if (typeof seat.price === 'number') {
+      return sum + seat.price;
+    }
+    if (seat.type === 'vip') return sum + vipPrice;
+    if (seat.type === 'premium') return sum + premiumPrice;
+    return sum + standardPrice;
   }, 0);
 
-  const bookingFee = selectedSeats.length > 0 ? 1.75 * selectedSeats.length : 0;
+  const bookingFee = selectedSeats.length > 0 ? ticketFee * selectedSeats.length : 0;
   const totalAmount = subtotal + bookingFee;
 
   const handleProceedToCheckout = () => {
@@ -148,7 +248,7 @@ export const SeatSelection = () => {
         </div>
 
         <div className="badge bg-dark border border-secondary text-white-50 px-3 py-2">
-          Max {MAX_SEATS_PER_BOOKING} tickets / booking
+          Max {maxSeatsPerBooking} tickets / booking
         </div>
       </div>
 

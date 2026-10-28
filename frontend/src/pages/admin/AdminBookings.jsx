@@ -23,10 +23,15 @@ export const AdminBookings = () => {
   }, []);
 
   const filtered = bookings.filter((b) => {
+    const idStr = String(b.id || b._id || '').toLowerCase();
+    const custStr = String(b.customerName || b.user?.name || '').toLowerCase();
+    const movieStr = String(b.movieTitle || b.movie?.title || '').toLowerCase();
+    const q = search.toLowerCase();
+
     const matchesSearch =
-      b.id.toLowerCase().includes(search.toLowerCase()) ||
-      b.customerName.toLowerCase().includes(search.toLowerCase()) ||
-      b.movieTitle.toLowerCase().includes(search.toLowerCase());
+      idStr.includes(q) ||
+      custStr.includes(q) ||
+      movieStr.includes(q);
 
     const matchesStatus = statusFilter === 'all' || b.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -97,10 +102,10 @@ export const AdminBookings = () => {
                 <tr key={b.id}>
                   <td><span className="fw-mono text-danger fw-bold">{b.id}</span></td>
                   <td>
-                    <div className="fw-semibold text-white">{b.customerName}</div>
-                    <small className="text-white-50">{b.customerEmail}</small>
+                    <div className="fw-semibold text-white">{b.customerName || b.user?.name || 'Customer'}</div>
+                    <small className="text-white-50">{b.customerEmail || b.user?.email || 'N/A'}</small>
                   </td>
-                  <td className="text-white fw-medium">{b.movieTitle}</td>
+                  <td className="text-white fw-medium">{b.movieTitle || b.movie?.title}</td>
                   <td>
                     <div className="text-white-50 small">{b.date} • {b.time}</div>
                     <small className="text-white-50">{b.theatreName}</small>

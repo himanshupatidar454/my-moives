@@ -1,8 +1,13 @@
 import { useAuth } from '../../context/AuthContext';
+import { USE_MOCKS } from '../../utils/env';
 import { IconShield, IconUser, IconSparkles } from './Icons';
 
 export const DemoBanner = () => {
   const { role, switchDemoRole } = useAuth();
+
+  if (!USE_MOCKS) {
+    return null;
+  }
 
   return (
     <aside aria-label="Demo mode status" className="py-1 px-3 d-flex align-items-center justify-content-between flex-wrap gap-2 text-white-50" style={{ backgroundColor: '#13131B', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: '0.8rem' }}>

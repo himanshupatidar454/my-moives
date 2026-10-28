@@ -6,6 +6,10 @@ const showController = require("../controllers/showController");
 const bookingController = require("../controllers/bookingController");
 const reviewController = require("../controllers/reviewController");
 const { authenticate, authorize } = require("../middlewares/auth");
+const validate = require("../middlewares/validate");
+const { updateMovieValidation } = require("./movieRoutes");
+const { updateTheatreValidation } = require("./theatreRoutes");
+const { updateShowValidation } = require("./showRoutes");
 
 const router = express.Router();
 
@@ -32,20 +36,20 @@ router.delete("/reviews/:id", reviewController.deleteReview);
 
 // Movie Management
 router.post("/movies", movieController.createMovie);
-router.patch("/movies/:id", movieController.updateMovie);
-router.put("/movies/:id", movieController.updateMovie);
+router.patch("/movies/:id", updateMovieValidation, validate, movieController.updateMovie);
+router.put("/movies/:id", updateMovieValidation, validate, movieController.updateMovie);
 router.delete("/movies/:id", movieController.deleteMovie);
 
 // Theatre Management
 router.post("/theatres", theatreController.createTheatre);
-router.patch("/theatres/:id", theatreController.updateTheatre);
-router.put("/theatres/:id", theatreController.updateTheatre);
+router.patch("/theatres/:id", updateTheatreValidation, validate, theatreController.updateTheatre);
+router.put("/theatres/:id", updateTheatreValidation, validate, theatreController.updateTheatre);
 router.delete("/theatres/:id", theatreController.deleteTheatre);
 
 // Show Management
 router.post("/shows", showController.createShow);
-router.patch("/shows/:id", showController.updateShow);
-router.put("/shows/:id", showController.updateShow);
+router.patch("/shows/:id", updateShowValidation, validate, showController.updateShow);
+router.put("/shows/:id", updateShowValidation, validate, showController.updateShow);
 router.delete("/shows/:id", showController.deleteShow);
 
 module.exports = router;

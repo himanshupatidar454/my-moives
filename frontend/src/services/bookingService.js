@@ -1,5 +1,6 @@
 import api from './api';
 import { mockBookings } from '../data/mockBookings';
+import { USE_MOCKS } from '../utils/env';
 
 const BOOKINGS_LOCAL_KEY = 'imovies_bookings_cache';
 
@@ -15,15 +16,15 @@ const getStoredBookings = () => {
 };
 
 export const bookingService = {
-  // Create booking (initiates booking verification)
+  // Create booking (initiates booking verification and seats hold)
   createBooking: async (bookingPayload) => {
-    try {
+    if (!USE_MOCKS) {
       const res = await api.post('/bookings', bookingPayload);
-      if (res.data?.booking) {
-        return { success: true, booking: res.data.booking, isDemo: false };
+      const booking = res.data?.booking || res.data?.data?.booking;
+      if (booking) {
+        return { success: true, booking, isDemo: false };
       }
-    } catch {
-      // Backend not reached, create verified demo booking record
+      throw new Error('Booking could not be created');
     }
 
     const current = getStoredBookings();
@@ -43,15 +44,33 @@ export const bookingService = {
     return { success: true, booking: newBooking, isDemo: true };
   },
 
+  // Verify coupon code server-side
+  verifyCoupon: async (couponCode, subtotal) => {
+    if (!USE_MOCKS) {
+      const res = await api.post('/bookings/verify-coupon', { couponCode, subtotal });
+      return res.data?.data || res.data;
+    }
+
+    // Demo coupon calculations
+    const code = String(couponCode).trim().toUpperCase();
+    if (code === 'IMOVIES5' || code === 'SAVE5') {
+      return { valid: true, couponCode: code, discount: Math.min(5.0, subtotal), message: '$5 discount applied' };
+    }
+    if (code === 'PREMIERE10' || code === 'WELCOME10') {
+      return { valid: true, couponCode: code, discount: Math.round(subtotal * 0.1 * 100) / 100, message: '10% discount applied' };
+    }
+    if (code === 'IMOVIES20' || code === 'VIP20') {
+      return { valid: true, couponCode: code, discount: Math.round(subtotal * 0.2 * 100) / 100, message: '20% discount applied' };
+    }
+    throw new Error(`Invalid coupon code: '${couponCode}'`);
+  },
+
   // Get user bookings
   getUserBookings: async (userId = null) => {
-    try {
+    if (!USE_MOCKS) {
       const res = await api.get('/bookings/my-bookings');
-      if (res.data?.bookings) {
-        return { bookings: res.data.bookings, isDemo: false };
-      }
-    } catch {
-      // Backend fallback
+      const bookings = res.data?.bookings || res.data?.data?.bookings || [];
+      return { bookings, isDemo: false };
     }
 
     const all = getStoredBookings();
@@ -61,33 +80,36 @@ export const bookingService = {
 
   // Get booking by ID
   getBookingById: async (bookingId) => {
-    try {
+    if (!USE_MOCKS) {
       const res = await api.get(`/bookings/${bookingId}`);
-      if (res.data?.booking) {
-        return { booking: res.data.booking, isDemo: false };
+      const booking = res.data?.booking || res.data?.data?.booking;
+      if (booking) {
+        return { booking, isDemo: false };
       }
-    } catch {
-      // Backend fallback
+      throw new Error('Booking not found');
     }
 
     const all = getStoredBookings();
-    const found = all.find((b) => b.id === bookingId);
-    return { booking: found || null, isDemo: true };
+    const found = all.find((b) => b.id === bookingId || b._id === bookingId);
+    if (!found) throw new Error('Booking not found');
+    return { booking: found, isDemo: true };
   },
 
   // Cancel booking
   cancelBooking: async (bookingId, reason = 'Cancelled by customer') => {
-    try {
+    if (!USE_MOCKS) {
       const res = await api.post(`/bookings/${bookingId}/cancel`, { reason });
-      if (res.data?.success) {
-        return { success: true, message: res.data.message };
-      }
-    } catch {
-      // Demo fallback
+      const booking = res.data?.booking || res.data?.data?.booking;
+      return {
+        success: true,
+        message: res.data?.message || 'Booking cancelled successfully',
+        booking,
+        isDemo: false
+      };
     }
 
     const all = getStoredBookings();
-    const idx = all.findIndex((b) => b.id === bookingId);
+    const idx = all.findIndex((b) => b.id === bookingId || b._id === bookingId);
     if (idx !== -1) {
       all[idx].status = 'cancelled';
       all[idx].paymentStatus = 'refunded (demo)';
@@ -99,13 +121,14 @@ export const bookingService = {
   },
 
   // Admin: Get all bookings
-  getAllBookingsAdmin: async () => {
-    try {
-      const res = await api.get('/admin/bookings');
-      if (res.data?.bookings) return { bookings: res.data.bookings, isDemo: false };
-    } catch {
-      // Demo
+  getAllBookingsAdmin: async (params = {}) => {
+    if (!USE_MOCKS) {
+      const res = await api.get('/admin/bookings', { params });
+      const bookings = res.data?.bookings || res.data?.data?.bookings || [];
+      const total = res.data?.total ?? res.data?.data?.total ?? bookings.length;
+      return { bookings, total, isDemo: false };
     }
-    return { bookings: getStoredBookings(), isDemo: true };
+
+    return { bookings: getStoredBookings(), total: getStoredBookings().length, isDemo: true };
   }
 };

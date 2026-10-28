@@ -6,11 +6,12 @@ const bookingController = {
   // POST /api/bookings
   createBooking: async (req, res, next) => {
     try {
-      const { showId, seatIdentifiers, selectedSeats } = req.body;
+      const { showId, seatIdentifiers, selectedSeats, couponCode } = req.body;
       const booking = await BookingService.createBooking({
         userId: req.user._id,
         showId,
-        seatIdentifiers: seatIdentifiers || selectedSeats
+        seatIdentifiers: seatIdentifiers || selectedSeats,
+        couponCode
       });
 
       return ApiResponse.success(
@@ -20,7 +21,20 @@ const bookingController = {
         201
       );
     } catch (error) {
-      return ApiResponse.error(res, error.message, [], 400);
+      const status = error.statusCode || 400;
+      return ApiResponse.error(res, error.message, [], status);
+    }
+  },
+
+  // POST /api/bookings/verify-coupon
+  verifyCoupon: async (req, res, next) => {
+    try {
+      const { couponCode, subtotal } = req.body;
+      const result = BookingService.calculateCouponDiscount(couponCode, Number(subtotal) || 0);
+      return ApiResponse.success(res, "Coupon verified successfully", result);
+    } catch (error) {
+      const status = error.statusCode || 400;
+      return ApiResponse.error(res, error.message, [], status);
     }
   },
 
@@ -48,7 +62,8 @@ const bookingController = {
         booking
       });
     } catch (error) {
-      return ApiResponse.error(res, error.message, [], 404);
+      const status = error.statusCode || 404;
+      return ApiResponse.error(res, error.message, [], status);
     }
   },
 
@@ -72,7 +87,8 @@ const bookingController = {
         { booking: cancelledBooking }
       );
     } catch (error) {
-      return ApiResponse.error(res, error.message, [], 400);
+      const status = error.statusCode || 400;
+      return ApiResponse.error(res, error.message, [], status);
     }
   },
 

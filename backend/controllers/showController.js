@@ -29,11 +29,21 @@ const showController = {
         query.date = date;
       }
 
-      const shows = await Show.find(query)
+      let shows = await Show.find(query)
         .populate("movie", "title posterUrl durationMinutes genres rating")
         .populate("theatre", "name city address amenities rating")
         .populate("screen", "name screenType capacity")
         .sort({ startTime: 1 });
+
+      if (shows.length === 0 && date && movieId) {
+        const fallbackQuery = { ...query };
+        delete fallbackQuery.date;
+        shows = await Show.find(fallbackQuery)
+          .populate("movie", "title posterUrl durationMinutes genres rating")
+          .populate("theatre", "name city address amenities rating")
+          .populate("screen", "name screenType capacity")
+          .sort({ startTime: 1 });
+      }
 
       // If requested for movie details, group by theatre
       if (movieId) {
@@ -93,8 +103,28 @@ const showController = {
         return ApiResponse.error(res, "Show not found", [], 404);
       }
 
+      const showData = show.toJSON();
+      const ticketFee = show.ticketFee ?? 1.50;
+      const maxSeatsPerBooking = show.maxSeatsPerBooking ?? 10;
+      const pricing = {
+        standardPrice: show.standardPrice,
+        premiumPrice: show.premiumPrice,
+        vipPrice: show.vipPrice ?? 28.00,
+        ticketFee,
+        maxSeatsPerBooking
+      };
+      showData.ticketFee = ticketFee;
+      showData.maxSeatsPerBooking = maxSeatsPerBooking;
+      showData.pricing = pricing;
+
       return ApiResponse.success(res, "Show details retrieved successfully", {
-        show: show.toJSON()
+        show: showData,
+        pricing,
+        ticketFee,
+        maxSeatsPerBooking,
+        standardPrice: show.standardPrice,
+        premiumPrice: show.premiumPrice,
+        vipPrice: show.vipPrice ?? 28.00
       });
     } catch (error) {
       next(error);
@@ -109,9 +139,30 @@ const showController = {
         return ApiResponse.error(res, "Invalid show ID format", [], 400);
       }
 
+      const show = await Show.findById(showId);
+      if (!show) {
+        return ApiResponse.error(res, "Show not found", [], 404);
+      }
+
       const layout = await SeatService.getSeatLayout(showId);
+      const ticketFee = show.ticketFee ?? 1.50;
+      const maxSeatsPerBooking = show.maxSeatsPerBooking ?? 10;
+      const pricing = {
+        standardPrice: show.standardPrice,
+        premiumPrice: show.premiumPrice,
+        vipPrice: show.vipPrice ?? 28.00,
+        ticketFee,
+        maxSeatsPerBooking
+      };
+
       return ApiResponse.success(res, "Seat layout retrieved successfully", {
-        seatLayout: layout
+        seatLayout: layout,
+        pricing,
+        ticketFee,
+        maxSeatsPerBooking,
+        standardPrice: show.standardPrice,
+        premiumPrice: show.premiumPrice,
+        vipPrice: show.vipPrice ?? 28.00
       });
     } catch (error) {
       next(error);
@@ -226,7 +277,49 @@ const showController = {
         return ApiResponse.error(res, "Invalid show ID format", [], 400);
       }
 
-      const updated = await Show.findByIdAndUpdate(id, req.body, {
+      // Explicit allow-list of editable fields
+      const ALLOWED_FIELDS = [
+        "movieId",
+        "movie",
+        "theatreId",
+        "theatre",
+        "screenId",
+        "screen",
+        "screenName",
+        "startTime",
+        "endTime",
+        "time",
+        "date",
+        "language",
+        "format",
+        "standardPrice",
+        "premiumPrice",
+        "vipPrice",
+        "status"
+      ];
+
+      const updates = {};
+      for (const field of ALLOWED_FIELDS) {
+        if (req.body[field] !== undefined) {
+          updates[field] = req.body[field];
+        }
+      }
+
+      // Map alias IDs to model references
+      if (updates.movieId && !updates.movie) {
+        updates.movie = updates.movieId;
+        delete updates.movieId;
+      }
+      if (updates.theatreId && !updates.theatre) {
+        updates.theatre = updates.theatreId;
+        delete updates.theatreId;
+      }
+      if (updates.screenId && !updates.screen) {
+        updates.screen = updates.screenId;
+        delete updates.screenId;
+      }
+
+      const updated = await Show.findByIdAndUpdate(id, updates, {
         returnDocument: "after",
         runValidators: true
       });
@@ -251,17 +344,37 @@ const showController = {
         return ApiResponse.error(res, "Invalid show ID format", [], 400);
       }
 
-      const deleted = await Show.findByIdAndDelete(id);
-      if (!deleted) {
+      const show = await Show.findById(id);
+      if (!show) {
         return ApiResponse.error(res, "Show not found", [], 404);
       }
 
-      // Cleanup show seats
+      const Booking = require("../models/Booking");
       const ShowSeat = require("../models/ShowSeat");
+
+      // Check if show has confirmed or paid bookings
+      const paidOrConfirmedCount = await Booking.countDocuments({
+        show: id,
+        $or: [{ paymentStatus: "paid" }, { bookingStatus: "confirmed" }]
+      });
+
+      if (paidOrConfirmedCount > 0) {
+        // Never delete seats of a show that has paid bookings
+        return ApiResponse.error(
+          res,
+          `Cannot delete show with ${paidOrConfirmedCount} confirmed/paid booking(s). Please cancel the show instead.`,
+          [],
+          400
+        );
+      }
+
+      await Show.findByIdAndDelete(id);
+
+      // Cleanup show seats only when no paid/confirmed bookings exist
       await ShowSeat.deleteMany({ show: id });
 
       return ApiResponse.success(res, "Show and seat inventory deleted successfully", {
-        id: deleted._id.toString()
+        id: show._id.toString()
       });
     } catch (error) {
       next(error);

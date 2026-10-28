@@ -1,4 +1,5 @@
 import { useAuth } from '../../context/AuthContext';
+import { USE_MOCKS } from '../../utils/env';
 import { IconMenu, IconUser, IconLogOut } from '../common/Icons';
 
 export const AdminNavbar = ({ onToggleSidebar }) => {
@@ -21,15 +22,17 @@ export const AdminNavbar = ({ onToggleSidebar }) => {
       </div>
 
       <div className="d-flex align-items-center gap-3">
-        <button
-          type="button"
-          onClick={() => switchDemoRole('user')}
-          className="btn btn-sm btn-outline-light py-1 px-2 d-none d-sm-inline-flex align-items-center gap-1"
-          style={{ fontSize: '0.8rem' }}
-        >
-          <IconUser size={14} />
-          Switch to Customer
-        </button>
+        {USE_MOCKS && (
+          <button
+            type="button"
+            onClick={() => switchDemoRole && switchDemoRole('user')}
+            className="btn btn-sm btn-outline-light py-1 px-2 d-none d-sm-inline-flex align-items-center gap-1"
+            style={{ fontSize: '0.8rem' }}
+          >
+            <IconUser size={14} />
+            Switch to Customer
+          </button>
+        )}
 
         <div className="d-flex align-items-center gap-2">
           <img

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { reviewService } from '../../services/reviewService';
-import { mockMovies } from '../../data/mockMovies';
 import { toast } from 'react-toastify';
 import { IconTrash } from '../../components/common/Icons';
 
@@ -8,8 +7,12 @@ export const AdminReviews = () => {
   const [reviews, setReviews] = useState([]);
 
   const fetchReviews = async () => {
-    const res = await reviewService.getAllReviewsAdmin();
-    setReviews(res.reviews || []);
+    try {
+      const res = await reviewService.getAllReviewsAdmin();
+      setReviews(res.reviews || []);
+    } catch (err) {
+      console.error('Failed fetching reviews for admin', err);
+    }
   };
 
   useEffect(() => {
@@ -17,14 +20,34 @@ export const AdminReviews = () => {
   }, []);
 
   const handleDeleteReview = async (id) => {
-    await reviewService.deleteReview(id);
-    toast.info('Review removed from cinema catalogue.');
-    fetchReviews();
+    try {
+      await reviewService.deleteReview(id);
+      toast.info('Review removed from cinema catalogue.');
+      fetchReviews();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete review.');
+    }
   };
 
-  const getMovieTitle = (mId) => {
-    const m = mockMovies.find((mov) => mov.id === mId);
-    return m ? m.title : 'Dune: Part Two';
+  const getMovieTitle = (rev) => {
+    if (rev.movie && typeof rev.movie === 'object' && rev.movie.title) {
+      return rev.movie.title;
+    }
+    return rev.movieTitle || 'Cinema Movie';
+  };
+
+  const getReviewerName = (rev) => {
+    if (rev.user && typeof rev.user === 'object' && rev.user.name) {
+      return rev.user.name;
+    }
+    return rev.userName || rev.author || 'Cinema Enthusiast';
+  };
+
+  const getReviewerAvatar = (rev) => {
+    if (rev.user && typeof rev.user === 'object' && rev.user.avatar) {
+      return rev.user.avatar;
+    }
+    return rev.userAvatar || rev.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80';
   };
 
   return (
@@ -56,20 +79,20 @@ export const AdminReviews = () => {
             </thead>
             <tbody>
               {reviews.map((rev) => (
-                <tr key={rev.id}>
+                <tr key={rev.id || rev._id}>
                   <td>
                     <div className="d-flex align-items-center gap-2">
                       <img
-                        src={rev.avatar}
-                        alt={rev.author}
+                        src={getReviewerAvatar(rev)}
+                        alt={getReviewerName(rev)}
                         className="rounded-circle object-fit-cover shadow-sm"
                         width="32"
                         height="32"
                       />
-                      <span className="fw-bold text-white small">{rev.author}</span>
+                      <span className="fw-bold text-white small">{getReviewerName(rev)}</span>
                     </div>
                   </td>
-                  <td className="text-white fw-medium">{getMovieTitle(rev.movieId)}</td>
+                  <td className="text-white fw-medium">{getMovieTitle(rev)}</td>
                   <td>
                     <span className="badge bg-warning bg-opacity-25 text-warning border border-warning border-opacity-25 px-2 py-1">
                       {rev.rating} ★
@@ -77,19 +100,19 @@ export const AdminReviews = () => {
                   </td>
                   <td style={{ maxWidth: '320px' }}>
                     <p className="text-white-50 small mb-0 text-truncate">
-                      "{rev.content}"
+                      "{rev.reviewText || rev.comment || rev.content}"
                     </p>
                   </td>
-                  <td className="text-white-50 small">{rev.date}</td>
+                  <td className="text-white-50 small">{rev.date || (rev.createdAt ? new Date(rev.createdAt).toISOString().split('T')[0] : 'Recent')}</td>
                   <td>
-                    <span className="badge bg-success bg-opacity-25 text-success">
-                      Verified
+                    <span className={`badge ${rev.verifiedPurchase ? 'bg-success' : 'bg-secondary'} bg-opacity-25 ${rev.verifiedPurchase ? 'text-success' : 'text-white-50'}`}>
+                      {rev.verifiedPurchase ? 'Verified' : 'Audience'}
                     </span>
                   </td>
                   <td className="text-end">
                     <button
                       type="button"
-                      onClick={() => handleDeleteReview(rev.id)}
+                      onClick={() => handleDeleteReview(rev.id || rev._id)}
                       className="btn btn-sm btn-outline-danger p-1"
                       title="Delete Review"
                     >

@@ -50,14 +50,14 @@ const reviewController = {
   submitReview: async (req, res, next) => {
     try {
       const { movieId } = req.params;
-      const { rating, comment, reviewText } = req.body;
+      const { rating, comment, reviewText, content } = req.body;
 
       const parsedRating = Number(rating);
       if (!parsedRating || parsedRating < 1 || parsedRating > 10) {
         return ApiResponse.error(res, "Rating must be a number between 1 and 10", [], 422);
       }
 
-      const text = reviewText || comment;
+      const text = reviewText || comment || content;
       if (!text || text.trim().length < 2) {
         return ApiResponse.error(res, "Review text must be at least 2 characters", [], 422);
       }
@@ -123,7 +123,7 @@ const reviewController = {
   updateReview: async (req, res, next) => {
     try {
       const { id } = req.params;
-      const { rating, comment, reviewText } = req.body;
+      const { rating, comment, reviewText, content } = req.body;
 
       if (!mongoose.Types.ObjectId.isValid(id)) {
         return ApiResponse.error(res, "Invalid review ID format", [], 400);
@@ -141,8 +141,8 @@ const reviewController = {
       if (rating) {
         review.rating = Number(rating);
       }
-      if (comment || reviewText) {
-        review.reviewText = (reviewText || comment).trim();
+      if (comment || reviewText || content) {
+        review.reviewText = (reviewText || comment || content).trim();
       }
 
       await review.save();

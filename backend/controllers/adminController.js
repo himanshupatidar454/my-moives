@@ -5,6 +5,7 @@ const Booking = require("../models/Booking");
 const User = require("../models/User");
 const Review = require("../models/Review");
 const ApiResponse = require("../utils/apiResponse");
+const escapeRegex = require("../utils/escapeRegex");
 
 const adminController = {
   // GET /api/admin/stats
@@ -167,7 +168,7 @@ const adminController = {
       const filter = {};
 
       if (search && search.trim()) {
-        const q = search.trim();
+        const q = escapeRegex(search.trim());
         filter.$or = [
           { name: { $regex: q, $options: "i" } },
           { email: { $regex: q, $options: "i" } }

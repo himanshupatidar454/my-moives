@@ -22,27 +22,31 @@ export const SeatGrid = ({ seatRows, selectedSeats, onToggleSeat }) => {
               <div className="d-flex align-items-center gap-1">
                 {rowObj.seats.map((seat, index) => {
                   const isSelected = selectedSeats.some((s) => s.id === seat.id);
-                  const isOccupied = seat.status === 'occupied';
+                  const isUnavailable =
+                    seat.status === 'occupied' ||
+                    seat.status === 'reserved' ||
+                    seat.status === 'booked' ||
+                    seat.status === 'unavailable';
 
                   // Add spacing for aisle after seat 3 and seat 9
                   const addAisle = index === 2 || index === 8;
 
                   let extraClass = '';
                   if (isSelected) extraClass += ' selected';
-                  if (isOccupied) extraClass += ' occupied';
+                  if (isUnavailable) extraClass += ' occupied';
                   if (isVip || isPremium) extraClass += ' premium';
 
                   return (
                     <React.Fragment key={seat.id}>
                       <button
                         type="button"
-                        disabled={isOccupied}
+                        disabled={isUnavailable}
                         onClick={() => onToggleSeat(seat)}
                         className={`seat-button ${extraClass}`}
-                        title={`${seat.id} (${seat.type.toUpperCase()}) - ${isOccupied ? 'Occupied' : isSelected ? 'Selected' : 'Available'}`}
-                        aria-label={`Seat ${seat.id}, ${seat.type}, ${isOccupied ? 'occupied' : isSelected ? 'selected' : 'available'}`}
+                        title={`${seat.id} (${seat.type.toUpperCase()}) - ${isUnavailable ? 'Unavailable' : isSelected ? 'Selected' : 'Available'}`}
+                        aria-label={`Seat ${seat.id}, ${seat.type}, ${isUnavailable ? 'unavailable' : isSelected ? 'selected' : 'available'}`}
                       >
-                        {!isOccupied && seat.number}
+                        {!isUnavailable && seat.number}
                       </button>
                       {addAisle && <div style={{ width: '18px' }} />}
                     </React.Fragment>

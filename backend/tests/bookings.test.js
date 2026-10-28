@@ -144,7 +144,7 @@ describe("Booking and Payment Workflows", () => {
         seatIdentifiers: ["C4"]
       });
 
-    expect(res.statusCode).toBe(400);
+    expect(res.statusCode).toBe(409);
     expect(res.body.success).toBe(false);
     expect(res.body.message).toContain("no longer available");
   });
@@ -213,7 +213,7 @@ describe("Booking and Payment Workflows", () => {
       .get(`/api/bookings/${createdBooking._id || createdBooking.id}`)
       .set("Authorization", `Bearer ${user2Token}`);
 
-    expect(res.statusCode).toBe(404);
+    expect(res.statusCode).toBe(403);
     expect(res.body.success).toBe(false);
   });
 
